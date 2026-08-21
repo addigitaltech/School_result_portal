@@ -36,3 +36,13 @@ A web application for managing school results, built with React, TypeScript, Vit
 ```
 npm run build
 ```
+
+## Team Members
+
+* Hussaini Musa Usman (Team Lead)
+* Hassan Ahmad Tijjani (Popey)
+* Ibrahim Usman
+* Najib Usman
+* Sani Musa
+* Khadija Ahmad (ummubasma)
+* Abdurrahman Yunusa Adamu
