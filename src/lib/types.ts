@@ -97,6 +97,7 @@ export interface Student {
   date_of_birth: string | null;
   class_id: string | null;
   arm_id: string | null;
+  photo_url: string | null;
   parent_guardian: string | null;
   parent_phone: string | null;
   email: string | null;

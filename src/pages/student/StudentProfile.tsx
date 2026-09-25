@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+import { Card, CardBody } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
 import { fullName, formatDate } from '@/lib/format';
-import type { Student, ClassRow } from '@/lib/types';
+import type { Student } from '@/lib/types';
 import { Mail, Phone, Calendar, User, BookOpen } from 'lucide-react';
 
 export function StudentProfile() {
@@ -30,46 +30,21 @@ export function StudentProfile() {
   if (!student) return <p className="text-slate-500">Student profile not found.</p>;
 
   const rows: [string, string | null][] = [
-    ['Student ID', student.student_id],
-    ['First Name', student.first_name],
-    ['Last Name', student.last_name],
-    ['Other Name', student.other_name || '—'],
-    ['Gender', student.gender],
-    ['Date of Birth', formatDate(student.date_of_birth)],
-    ['Class', className],
-    ['Parent/Guardian', student.parent_guardian],
-    ['Parent Phone', student.parent_phone],
-    ['Email', student.email],
-    ['Admission Date', formatDate(student.admission_date)],
-    ['Status', student.status],
+    ['Student ID', student.student_id], ['First Name', student.first_name], ['Last Name', student.last_name], ['Other Name', student.other_name || '—'],
+    ['Gender', student.gender], ['Date of Birth', formatDate(student.date_of_birth)], ['Class', className], ['Parent/Guardian', student.parent_guardian],
+    ['Parent Phone', student.parent_phone], ['Email', student.email], ['Admission Date', formatDate(student.admission_date)], ['Status', student.status],
   ];
 
   return (
     <div className="space-y-4 max-w-3xl">
       <h2 className="text-2xl font-bold text-slate-800">My Profile</h2>
-
-      <Card>
-        <CardBody>
-          <div className="flex items-center gap-4 pb-4 border-b border-slate-200">
-            <div className="h-16 w-16 rounded-full bg-blue-600 text-white flex items-center justify-center text-xl font-semibold">
-              {student.first_name.charAt(0)}
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-slate-800">{fullName(student)}</p>
-              <p className="text-sm text-slate-500 font-mono">{student.student_id}</p>
-              <p className="text-xs text-blue-600 mt-0.5">{className}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mt-4">
-            {rows.map(([k, v]) => (
-              <div key={k} className="flex items-start gap-2">
-                <span className="text-xs text-slate-400 w-32 flex-shrink-0 pt-0.5">{k}</span>
-                <span className="text-sm text-slate-700 font-medium">{v ?? '—'}</span>
-              </div>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
+      <Card><CardBody>
+        <div className="flex items-center gap-4 pb-4 border-b border-slate-200">
+          {student.photo_url ? <img src={student.photo_url} alt={`${fullName(student)} profile`} className="h-20 w-20 rounded-full object-cover border border-slate-200" /> : <div className="h-20 w-20 rounded-full bg-blue-600 text-white flex items-center justify-center text-2xl font-semibold">{student.first_name.charAt(0).toUpperCase()}</div>}
+          <div><p className="text-lg font-semibold text-slate-800">{fullName(student)}</p><p className="text-sm text-slate-500 font-mono">{student.student_id}</p><p className="text-xs text-blue-600 mt-0.5">{className}</p></div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mt-4">{rows.map(([key, value]) => <div key={key} className="flex items-start gap-2"><span className="text-xs text-slate-400 w-32 flex-shrink-0 pt-0.5">{key}</span><span className="text-sm text-slate-700 font-medium">{value ?? '—'}</span></div>)}</div>
+      </CardBody></Card>
     </div>
   );
 }

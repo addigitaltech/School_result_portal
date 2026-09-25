@@ -168,7 +168,9 @@ export function ResultSheet({ student, settings, session, term, results, classNa
             <p className="text-sm text-slate-600">{settings?.address ?? '—'}</p>
             <p className="text-sm text-slate-600">Tel: {settings?.phone ?? '—'} | Email: {settings?.email ?? '—'}</p>
           </div>
-          <div className="w-14" />
+          <div className="h-14 w-14 overflow-hidden rounded-full border border-slate-200 bg-blue-600 text-white flex items-center justify-center text-xl font-semibold">
+            {student.photo_url ? <img src={student.photo_url} alt={`${fullName(student)} profile`} className="h-full w-full object-cover" /> : student.first_name.charAt(0).toUpperCase()}
+          </div>
         </div>
 
         <h2 className="text-center text-lg font-bold uppercase tracking-wide text-slate-800 my-4">Student Academic Result</h2>
