@@ -1,16 +1,25 @@
-import type { GradeInfo } from './types';
+import type { GradeBand, GradeInfo } from './types';
 
 export const CA_MAX = 40;
 export const EXAM_MAX = 60;
 export const TOTAL_MAX = 100;
 
-export function computeGrade(total: number): GradeInfo {
-  if (total >= 70) return { grade: 'A', remark: 'Excellent' };
-  if (total >= 60) return { grade: 'B', remark: 'Very Good' };
-  if (total >= 50) return { grade: 'C', remark: 'Good' };
-  if (total >= 45) return { grade: 'D', remark: 'Fair' };
-  if (total >= 40) return { grade: 'E', remark: 'Pass' };
-  return { grade: 'F', remark: 'Fail' };
+export const DEFAULT_GRADE_BANDS: GradeBand[] = [
+  { min_score: 70, max_score: 100, grade: 'A', remark: 'Excellent' },
+  { min_score: 60, max_score: 69, grade: 'B', remark: 'Very Good' },
+  { min_score: 50, max_score: 59, grade: 'C', remark: 'Good' },
+  { min_score: 45, max_score: 49, grade: 'D', remark: 'Fair' },
+  { min_score: 40, max_score: 44, grade: 'E', remark: 'Pass' },
+  { min_score: 0, max_score: 39, grade: 'F', remark: 'Fail' },
+];
+
+export function computeGrade(total: number, bands: GradeBand[] = DEFAULT_GRADE_BANDS): GradeInfo {
+  const effectiveBands = bands.length > 0 ? bands : DEFAULT_GRADE_BANDS;
+  const matchingBand = effectiveBands.find((band) => total >= band.min_score && total <= band.max_score);
+  if (matchingBand) return { grade: matchingBand.grade, remark: matchingBand.remark };
+
+  // Preserve a safe legacy fallback for values outside a custom band's range.
+  return total >= 70 ? { grade: 'A', remark: 'Excellent' } : { grade: 'F', remark: 'Fail' };
 }
 
 export function clampScore(value: number, max: number): number {

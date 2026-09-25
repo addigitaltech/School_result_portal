@@ -108,7 +108,7 @@ export function AdminDashboard() {
                 {recent.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3 text-slate-700">Result #{r.id.slice(0, 8)}</td>
-                    <td className="px-5 py-3 text-slate-600">{r.ca_score}</td>
+                    <td className="px-5 py-3 text-slate-600">{r.ca1_score + r.ca2_score + r.ca3_score}</td>
                     <td className="px-5 py-3 text-slate-600">{r.exam_score}</td>
                     <td className="px-5 py-3 font-semibold text-slate-800">{r.total_score}</td>
                     <td className="px-5 py-3"><span className="font-semibold text-blue-700">{r.grade ?? '—'}</span></td>

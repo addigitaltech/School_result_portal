@@ -101,7 +101,7 @@ export function ResultEntryPage() {
         const { data: existing } = await supabase.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
         const map: Record<string, RowState> = {};
         (existing ?? []).forEach((r: Result) => {
-          map[r.student_id] = { ca: String(r.ca_score), exam: String(r.exam_score), status: r.status, existingId: r.id };
+          map[r.student_id] = { ca: String(r.ca1_score + r.ca2_score + r.ca3_score), exam: String(r.exam_score), status: r.status, existingId: r.id };
         });
         setRows(map);
       } else {
@@ -141,7 +141,9 @@ export function ResultEntryPage() {
         class_id: classId,
         session_id: session,
         term_id: term,
-        ca_score: caVal,
+        ca1_score: caVal,
+        ca2_score: 0,
+        ca3_score: 0,
         exam_score: examVal,
         grade,
         remark,
@@ -164,7 +166,7 @@ export function ResultEntryPage() {
       const { data: existing } = await supabase.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
       const map: Record<string, RowState> = {};
       (existing ?? []).forEach((r: Result) => {
-        map[r.student_id] = { ca: String(r.ca_score), exam: String(r.exam_score), status: r.status, existingId: r.id };
+        map[r.student_id] = { ca: String(r.ca1_score + r.ca2_score + r.ca3_score), exam: String(r.exam_score), status: r.status, existingId: r.id };
       });
       setRows(map);
     }

@@ -76,7 +76,7 @@ export function ResultSheet({ student, settings, session, term, results, classNa
             ) : results.map((r) => (
               <tr key={r.id} className="even:bg-slate-50">
                 <td className="px-3 py-2 border border-slate-300 font-medium text-slate-800">{r.subjects?.name ?? '—'}</td>
-                <td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{r.ca_score}</td>
+                <td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{r.ca1_score + r.ca2_score + r.ca3_score}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{r.exam_score}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center font-semibold text-slate-900">{r.total_score}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center font-bold text-blue-700">{r.grade ?? computeGrade(r.total_score).grade}</td>

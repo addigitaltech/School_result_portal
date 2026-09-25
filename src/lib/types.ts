@@ -21,6 +21,12 @@ export interface SchoolSettings {
   logo_url: string;
   current_session_id: string | null;
   current_term_id: string | null;
+  pass_percentage: number;
+  motto: string;
+  ca1_max_score: number;
+  ca2_max_score: number;
+  ca3_max_score: number;
+  exam_max_score: number;
   updated_at: string;
 }
 
@@ -59,6 +65,18 @@ export interface ClassRow {
   created_at: string;
 }
 
+export interface Arm {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface ClassArm {
+  class_id: string;
+  arm_id: string;
+  created_at: string;
+}
+
 export interface Subject {
   id: string;
   code: string;
@@ -78,6 +96,7 @@ export interface Student {
   gender: string | null;
   date_of_birth: string | null;
   class_id: string | null;
+  arm_id: string | null;
   parent_guardian: string | null;
   parent_phone: string | null;
   email: string | null;
@@ -97,6 +116,14 @@ export interface Parent {
 
 export type ResultStatus = 'Draft' | 'Pending' | 'Published';
 
+export interface GradeBand {
+  id?: string;
+  min_score: number;
+  max_score: number;
+  grade: string;
+  remark: string;
+}
+
 export interface Result {
   id: string;
   student_id: string;
@@ -105,12 +132,43 @@ export interface Result {
   class_id: string | null;
   session_id: string;
   term_id: string;
-  ca_score: number;
+  ca1_score: number;
+  ca2_score: number;
+  ca3_score: number;
   exam_score: number;
   total_score: number;
+  is_offered: boolean;
   grade: string | null;
   remark: string | null;
   status: ResultStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AffectiveTrait {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface AffectiveRating {
+  id: string;
+  student_id: string;
+  trait_id: string;
+  session_id: string;
+  term_id: string;
+  rating: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TermRemark {
+  id: string;
+  student_id: string;
+  session_id: string;
+  term_id: string;
+  teacher_remark: string;
+  principal_remark: string;
   created_at: string;
   updated_at: string;
 }

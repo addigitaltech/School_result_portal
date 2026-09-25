@@ -156,7 +156,7 @@ export function ResultsPage() {
                     <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{r.subjects?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">{r.classes?.name ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600 hidden xl:table-cell text-xs">{sessionName(r.session_id)} / {termName(r.term_id)}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.ca_score}</td>
+                    <td className="px-4 py-3 text-slate-600">{r.ca1_score + r.ca2_score + r.ca3_score}</td>
                     <td className="px-4 py-3 text-slate-600">{r.exam_score}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800">{r.total_score}</td>
                     <td className="px-4 py-3"><span className="font-semibold text-blue-700">{r.grade ?? '—'}</span></td>
