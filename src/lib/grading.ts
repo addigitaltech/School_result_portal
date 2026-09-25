@@ -29,6 +29,6 @@ export function clampScore(value: number, max: number): number {
   return Math.round(value);
 }
 
-export function overallGrade(avg: number): GradeInfo {
-  return computeGrade(avg);
+export function overallGrade(avg: number, bands: GradeBand[] = DEFAULT_GRADE_BANDS): GradeInfo {
+  return computeGrade(avg, bands);
 }

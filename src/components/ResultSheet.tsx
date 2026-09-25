@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { computeGrade, overallGrade } from '@/lib/grading';
 import { fullName } from '@/lib/format';
 import { Logo } from '@/components/Logo';
-import type { Student, SchoolSettings, AcademicSession, Term, Result, Subject } from '@/lib/types';
+import type { Student, SchoolSettings, AcademicSession, Term, Result, Subject, TermRemark, GradeBand } from '@/lib/types';
 import { Printer, Download } from 'lucide-react';
 
 interface ResultSheetProps {
@@ -15,11 +16,28 @@ interface ResultSheetProps {
 }
 
 export function ResultSheet({ student, settings, session, term, results, className }: ResultSheetProps) {
+  const [termRemark, setTermRemark] = useState<TermRemark | null>(null);
+  const [gradeBands, setGradeBands] = useState<GradeBand[]>([]);
   const handlePrint = () => window.print();
 
-  const totalScore = results.reduce((sum, r) => sum + r.total_score, 0);
-  const avg = results.length > 0 ? Math.round(totalScore / results.length) : 0;
-  const { grade: overallG, remark: overallR } = overallGrade(avg);
+  useEffect(() => {
+    if (!session?.id || !term?.id) { setTermRemark(null); return; }
+    (async () => {
+      const [remarkResponse, bandsResponse] = await Promise.all([
+        supabase.from('term_remarks').select('*').eq('student_id', student.id).eq('session_id', session.id).eq('term_id', term.id).maybeSingle(),
+        supabase.from('grade_bands').select('*').order('min_score', { ascending: false }),
+      ]);
+      setTermRemark(remarkResponse.data as TermRemark | null);
+      setGradeBands((bandsResponse.data ?? []) as GradeBand[]);
+    })();
+  }, [student.id, session?.id, term?.id]);
+
+  const offeredResults = results.filter((result) => result.is_offered !== false);
+  const totalScore = offeredResults.reduce((sum, r) => sum + r.total_score, 0);
+  const avg = offeredResults.length > 0 ? Math.round(totalScore / offeredResults.length) : 0;
+  const { grade: overallG, remark: overallR } = overallGrade(avg, gradeBands);
+  const caMax = (settings?.ca1_max_score ?? 40) + (settings?.ca2_max_score ?? 0) + (settings?.ca3_max_score ?? 0);
+  const examMax = settings?.exam_max_score ?? 60;
 
   return (
     <div>
@@ -63,24 +81,24 @@ export function ResultSheet({ student, settings, session, term, results, classNa
           <thead className="bg-slate-800 text-white text-xs uppercase">
             <tr>
               <th className="text-left px-3 py-2 border border-slate-400">Subject</th>
-              <th className="text-center px-3 py-2 border border-slate-400">CA (40)</th>
-              <th className="text-center px-3 py-2 border border-slate-400">Exam (60)</th>
+              <th className="text-center px-3 py-2 border border-slate-400">CA ({caMax})</th>
+              <th className="text-center px-3 py-2 border border-slate-400">Exam ({examMax})</th>
               <th className="text-center px-3 py-2 border border-slate-400">Total (100)</th>
               <th className="text-center px-3 py-2 border border-slate-400">Grade</th>
               <th className="text-left px-3 py-2 border border-slate-400">Remark</th>
             </tr>
           </thead>
           <tbody>
-            {results.length === 0 ? (
+            {offeredResults.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-8 text-slate-400 border border-slate-300">No published results available for this term.</td></tr>
-            ) : results.map((r) => (
+            ) : offeredResults.map((r) => (
               <tr key={r.id} className="even:bg-slate-50">
                 <td className="px-3 py-2 border border-slate-300 font-medium text-slate-800">{r.subjects?.name ?? '—'}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{r.ca1_score + r.ca2_score + r.ca3_score}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{r.exam_score}</td>
                 <td className="px-3 py-2 border border-slate-300 text-center font-semibold text-slate-900">{r.total_score}</td>
-                <td className="px-3 py-2 border border-slate-300 text-center font-bold text-blue-700">{r.grade ?? computeGrade(r.total_score).grade}</td>
-                <td className="px-3 py-2 border border-slate-300 text-slate-600">{r.remark ?? computeGrade(r.total_score).remark}</td>
+                <td className="px-3 py-2 border border-slate-300 text-center font-bold text-blue-700">{r.grade ?? computeGrade(r.total_score, gradeBands).grade}</td>
+                <td className="px-3 py-2 border border-slate-300 text-slate-600">{r.remark ?? computeGrade(r.total_score, gradeBands).remark}</td>
               </tr>
             ))}
           </tbody>
@@ -121,11 +139,11 @@ export function ResultSheet({ student, settings, session, term, results, classNa
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div className="border border-slate-200 rounded-lg p-3 min-h-[80px]">
             <p className="text-slate-500 text-xs font-medium mb-1">Teacher's Comment</p>
-            <p className="text-slate-700 italic">{avg >= 50 ? 'A satisfactory performance. Keep it up.' : 'More effort is needed next term.'}</p>
+            <p className="text-slate-700 italic">{termRemark?.teacher_remark || 'No teacher remark recorded.'}</p>
           </div>
           <div className="border border-slate-200 rounded-lg p-3 min-h-[80px]">
             <p className="text-slate-500 text-xs font-medium mb-1">Principal's Comment</p>
-            <p className="text-slate-700 italic">{avg >= 60 ? 'Excellent work. Aim higher.' : avg >= 45 ? 'Good attempt. Work harder.' : 'Significant improvement required.'}</p>
+            <p className="text-slate-700 italic">{termRemark?.principal_remark || 'No principal remark recorded.'}</p>
           </div>
         </div>
 
