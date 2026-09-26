@@ -11,6 +11,7 @@ export interface AuthUser {
   role: Role;
   display_name: string;
   teacher_id: string | null;
+  class_ids?: string[] | null;
   student_id: string | null;
   parent_id: string | null;
 }
@@ -100,6 +101,7 @@ function applyScope(table: string, user: AuthUser, where: string[], params: unkn
   if (user.role === 'teacher') {
     if (table === 'results') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (table === 'teachers') { where.push(`id = $${params.length + 1}`); params.push(user.teacher_id); }
+    if (['affective_ratings', 'term_remarks'].includes(table)) { where.push(`student_id IN (SELECT id FROM students WHERE class_id = ANY($${params.length + 1}::uuid[]))`); params.push(user.class_ids ?? []); }
     if (table === 'app_users') { where.push('1 = 0'); }
   }
   if (user.role === 'student') {
@@ -131,7 +133,7 @@ apiRouter.post('/login', async (req, res) => {
   const password = String(req.body?.password ?? '');
   if (!email || !password) return jsonError(res, 'Email and password are required.');
   const result = await query<AuthUser & { password_hash: string }>(
-    'SELECT id, email, password_hash, role, display_name, teacher_id, student_id, parent_id FROM app_users WHERE lower(email) = lower($1)', [email],
+    'SELECT u.id, u.email, u.password_hash, u.role, u.display_name, u.teacher_id, u.student_id, u.parent_id, t.class_ids FROM app_users u LEFT JOIN teachers t ON t.id = u.teacher_id WHERE lower(u.email) = lower($1)', [email],
   );
   const account = result.rows[0];
   if (!account || !(await bcrypt.compare(password, account.password_hash))) return jsonError(res, 'Invalid email or password.', 401);
@@ -192,7 +194,8 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
         if (typeof value === 'string') addFilter(table, key, value, params, where);
       }
       if (req.query.in_field && req.query.in_values && typeof req.query.in_field === 'string' && typeof req.query.in_values === 'string') addFilter(table, `${req.query.in_field}[in]`, req.query.in_values, params, where);
-      const order = typeof req.query.order === 'string' && columns[table].has(req.query.order.replace(/^-/, '')) ? req.query.order : 'created_at';
+      const defaultOrder = columns[table].has('created_at') ? 'created_at' : 'id';
+      const order = typeof req.query.order === 'string' && columns[table].has(req.query.order.replace(/^-/, '')) ? req.query.order : defaultOrder;
       const orderColumn = order.replace(/^-/, '');
       const direction = order.startsWith('-') ? 'DESC' : 'ASC';
       const limit = Math.min(Math.max(Number(req.query.limit ?? 1000), 1), 5000);

@@ -9,6 +9,8 @@
     "server:dev": "tsx server/src/index.ts",
     "server:build": "tsc -p server/tsconfig.json",
     "server:typecheck": "tsc -p server/tsconfig.json --noEmit",
+    "server:start": "node server/dist/index.js",
+    "server:seed-admin": "tsx server/src/seed-admin.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"

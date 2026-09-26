@@ -43,8 +43,8 @@ class QueryBuilder<T = any> implements PromiseLike<Result<any>> {
   limit(value: number) { this.params.set('limit', String(value)); return this; }
   single() { this.singleMode = 'single'; return this; }
   maybeSingle() { this.singleMode = 'maybeSingle'; return this; }
-  insert(payload: Record<string, unknown> | Record<string, unknown>[]) { this.method = 'POST'; this.body = Array.isArray(payload) ? payload[0] : payload; return this; }
-  upsert(payload: Record<string, unknown> | Record<string, unknown>[], options?: { onConflict?: string }) { this.method = 'POST'; this.body = Array.isArray(payload) ? payload[0] : payload; if (options?.onConflict) this.params.set('upsert', options.onConflict); return this; }
+  insert(payload: Record<string, unknown> | Record<string, unknown>[]) { this.method = 'POST'; this.body = payload; return this; }
+  upsert(payload: Record<string, unknown> | Record<string, unknown>[], options?: { onConflict?: string }) { this.method = 'POST'; this.body = payload; if (options?.onConflict) this.params.set('upsert', options.onConflict); return this; }
   update(payload: Record<string, unknown>) { this.method = 'PUT'; this.body = payload; return this; }
   delete() { this.method = 'DELETE'; return this; }
 
@@ -56,7 +56,9 @@ class QueryBuilder<T = any> implements PromiseLike<Result<any>> {
         method: this.method,
         ...(this.method === 'GET' || this.method === 'DELETE' ? {} : { body: JSON.stringify(this.body ?? {}) }),
       });
-      const data = this.singleMode ? (payload.data ? [payload.data as T] : []) : ((payload.data ?? []) as T[]);
+      const baseData = this.singleMode ? (payload.data ? [payload.data as T] : []) : ((payload.data ?? []) as T[]);
+      const hydrated = await hydrateRelations(this.table, baseData, this.params.get('select'));
+      const data = this.singleMode ? (hydrated[0] ?? null) : hydrated;
       return { data, error: null, count: payload.count };
     } catch (error) {
       return { data: [], error: error as Error, count: null };
@@ -66,6 +68,21 @@ class QueryBuilder<T = any> implements PromiseLike<Result<any>> {
   then<TResult1 = Result<any>, TResult2 = never>(onfulfilled?: ((value: Result<any>) => TResult1 | PromiseLike<TResult1>) | null, onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null) {
     return this.execute().then(onfulfilled, onrejected);
   }
+}
+
+async function hydrateRelations(table: string, rows: any[], selection: string | null) {
+  if (!selection || !selection.includes('(') || !rows.length) return rows;
+  const relations = [...selection.matchAll(/([a-z_]+)\(/g)].map((match) => match[1]).filter((relation) => relation !== table);
+  const relationMap: Record<string, string> = { students: 'student_id', subjects: 'subject_id', classes: 'class_id', teachers: 'teacher_id', terms: 'term_id', academic_sessions: 'session_id' };
+  for (const relation of relations) {
+    const foreignKey = relationMap[relation];
+    if (!foreignKey || !rows.some((row) => row[foreignKey])) continue;
+    const ids = [...new Set(rows.map((row) => row[foreignKey]).filter(Boolean))];
+    const response = await request<{ data: any[] }>(`/data/${relation}?in_field=id&in_values=${ids.map(encodeURIComponent).join(',')}&limit=5000`);
+    const byId = new Map((response.data ?? []).map((item) => [item.id, item]));
+    rows = rows.map((row) => ({ ...row, [relation]: byId.get(row[foreignKey]) ?? null }));
+  }
+  return rows;
 }
 
 export const api = {
