@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
@@ -16,10 +16,10 @@ export function StudentProfile() {
   useEffect(() => {
     if (!user?.student_id) { setLoading(false); return; }
     (async () => {
-      const { data: stu } = await supabase.from('students').select('*').eq('id', user.student_id).maybeSingle();
+      const { data: stu } = await api.from('students').select('*').eq('id', user.student_id).maybeSingle();
       setStudent(stu as Student | null);
       if (stu?.class_id) {
-        const { data: cls } = await supabase.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
+        const { data: cls } = await api.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
         setClassName(cls?.name ?? '—');
       }
       setLoading(false);

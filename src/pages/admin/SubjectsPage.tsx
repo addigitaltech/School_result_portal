@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -30,9 +30,9 @@ export function SubjectsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [s, c, t] = await Promise.all([
-      supabase.from('subjects').select('*').order('created_at', { ascending: false }),
-      supabase.from('classes').select('*').order('name'),
-      supabase.from('teachers').select('*').order('full_name'),
+      api.from('subjects').select('*').order('created_at', { ascending: false }),
+      api.from('classes').select('*').order('name'),
+      api.from('teachers').select('*').order('full_name'),
     ]);
     setSubjects(s.data ?? []);
     setClasses(c.data ?? []);
@@ -75,16 +75,16 @@ export function SubjectsPage() {
       status: editing.status,
     };
     const res = editing.id
-      ? await supabase.from('subjects').update(payload).eq('id', editing.id)
-      : await supabase.from('subjects').insert(payload);
+      ? await api.from('subjects').update(payload).eq('id', editing.id)
+      : await api.from('subjects').insert(payload);
     setSaving(false);
     if (res.error) { error('Failed to save subject.'); return; }
     // sync teacher arrays
     if (editing.teacher_id) {
-      const { data: t } = await supabase.from('teachers').select('subject_ids').eq('id', editing.teacher_id).maybeSingle();
+      const { data: t } = await api.from('teachers').select('subject_ids').eq('id', editing.teacher_id).maybeSingle();
       const arr = new Set(t?.subject_ids ?? []);
       arr.add(editing.id!);
-      await supabase.from('teachers').update({ subject_ids: [...arr] }).eq('id', editing.teacher_id);
+      await api.from('teachers').update({ subject_ids: [...arr] }).eq('id', editing.teacher_id);
     }
     success(editing.id ? 'Subject updated successfully.' : 'Subject added successfully.');
     setModalOpen(false);
@@ -93,7 +93,7 @@ export function SubjectsPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: err } = await supabase.from('subjects').delete().eq('id', deleteId);
+    const { error: err } = await api.from('subjects').delete().eq('id', deleteId);
     setDeleteId(null);
     if (err) { error('Failed to delete subject.'); return; }
     success('Subject deleted successfully.');

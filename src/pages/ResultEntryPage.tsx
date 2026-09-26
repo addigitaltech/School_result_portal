@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
@@ -63,13 +63,13 @@ export function ResultEntryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [s, t, c, sub, school, bands, traitRows] = await Promise.all([
-      supabase.from('academic_sessions').select('*').order('name'),
-      supabase.from('terms').select('*').order('name'),
-      supabase.from('classes').select('*').order('name'),
-      supabase.from('subjects').select('*').order('name'),
-      supabase.from('school_settings').select('ca1_max_score, ca2_max_score, ca3_max_score, exam_max_score').limit(1).maybeSingle(),
-      supabase.from('grade_bands').select('*').order('min_score', { ascending: false }),
-      supabase.from('affective_traits').select('*').order('name'),
+      api.from('academic_sessions').select('*').order('name'),
+      api.from('terms').select('*').order('name'),
+      api.from('classes').select('*').order('name'),
+      api.from('subjects').select('*').order('name'),
+      api.from('school_settings').select('ca1_max_score, ca2_max_score, ca3_max_score, exam_max_score').limit(1).maybeSingle(),
+      api.from('grade_bands').select('*').order('min_score', { ascending: false }),
+      api.from('affective_traits').select('*').order('name'),
     ]);
     setSessions(s.data ?? []);
     setTerms(t.data ?? []);
@@ -80,7 +80,7 @@ export function ResultEntryPage() {
     setTraits((traitRows.data ?? []) as AffectiveTrait[]);
 
     if (user?.role === 'teacher' && user.teacher_id) {
-      const { data: tch } = await supabase.from('teachers').select('id, subject_ids, class_ids').eq('id', user.teacher_id).maybeSingle();
+      const { data: tch } = await api.from('teachers').select('id, subject_ids, class_ids').eq('id', user.teacher_id).maybeSingle();
       setTeacher(tch as { id: string; subject_ids: string[]; class_ids: string[] } | null);
     }
     setLoading(false);
@@ -117,14 +117,14 @@ export function ResultEntryPage() {
   useEffect(() => {
     if (!classId) { setStudents([]); setRows({}); return; }
     (async () => {
-      const { data: studs } = await supabase.from('students').select('*').eq('class_id', classId).order('first_name');
+      const { data: studs } = await api.from('students').select('*').eq('class_id', classId).order('first_name');
       const loadedStudents = (studs ?? []) as Student[];
       setStudents(loadedStudents);
       const map: Record<string, RowState> = {};
       loadedStudents.forEach((student) => { map[student.id] = makeDefaultRow(); });
 
       if (session && term && subjectId && loadedStudents.length) {
-        const { data: existing } = await supabase.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
+        const { data: existing } = await api.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
         (existing ?? []).forEach((result: Result) => {
           const row = map[result.student_id] ?? makeDefaultRow();
           map[result.student_id] = {
@@ -138,8 +138,8 @@ export function ResultEntryPage() {
       if (session && term && loadedStudents.length) {
         const studentIds = loadedStudents.map((student) => student.id);
         const [ratingResponse, remarkResponse] = await Promise.all([
-          supabase.from('affective_ratings').select('*').in('student_id', studentIds).eq('session_id', session).eq('term_id', term),
-          supabase.from('term_remarks').select('*').in('student_id', studentIds).eq('session_id', session).eq('term_id', term),
+          api.from('affective_ratings').select('*').in('student_id', studentIds).eq('session_id', session).eq('term_id', term),
+          api.from('term_remarks').select('*').in('student_id', studentIds).eq('session_id', session).eq('term_id', term),
         ]);
         (ratingResponse.data ?? []).forEach((rating: AffectiveRating) => {
           const row = map[rating.student_id] ?? makeDefaultRow();
@@ -195,19 +195,19 @@ export function ResultEntryPage() {
       };
       if (hasScores || !row.offered) {
         const resultResponse = row.existingId
-          ? await supabase.from('results').update(payload).eq('id', row.existingId)
-          : await supabase.from('results').insert(payload);
+          ? await api.from('results').update(payload).eq('id', row.existingId)
+          : await api.from('results').insert(payload);
         if (resultResponse.error) { error(`Failed to save result for ${fullName(student)}`); continue; }
       }
 
-      const { error: remarkError } = await supabase.from('term_remarks').upsert({
+      const { error: remarkError } = await api.from('term_remarks').upsert({
         student_id: student.id, session_id: session, term_id: term, teacher_remark: row.teacherRemark.trim(), principal_remark: row.principalRemark.trim(), updated_at: new Date().toISOString(),
       }, { onConflict: 'student_id,session_id,term_id' });
       if (remarkError) { error(`Failed to save term remarks for ${fullName(student)}`); continue; }
 
       const ratings = traits.filter((trait) => row.ratings[trait.id]).map((trait) => ({ student_id: student.id, trait_id: trait.id, session_id: session, term_id: term, rating: row.ratings[trait.id], updated_at: new Date().toISOString() }));
       if (ratings.length) {
-        const { error: ratingError } = await supabase.from('affective_ratings').upsert(ratings, { onConflict: 'student_id,trait_id,session_id,term_id' });
+        const { error: ratingError } = await api.from('affective_ratings').upsert(ratings, { onConflict: 'student_id,trait_id,session_id,term_id' });
         if (ratingError) { error(`Failed to save affective ratings for ${fullName(student)}`); continue; }
       }
       saved++;
@@ -215,7 +215,7 @@ export function ResultEntryPage() {
     setSaving(false);
     if (saved > 0) {
       success(publish ? `${saved} student results published successfully.` : `${saved} student results saved successfully.`);
-      const { data: existing } = await supabase.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
+      const { data: existing } = await api.from('results').select('*').eq('session_id', session).eq('term_id', term).eq('subject_id', subjectId).eq('class_id', classId);
       const map = { ...rows };
       (existing ?? []).forEach((result: Result) => {
         const row = map[result.student_id] ?? makeDefaultRow();

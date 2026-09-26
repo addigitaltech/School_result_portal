@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
@@ -33,15 +33,15 @@ export function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [s, se, t, bands] = await Promise.all([
-      supabase.from('school_settings').select('*').limit(1).maybeSingle(),
-      supabase.from('academic_sessions').select('*').order('name'),
-      supabase.from('terms').select('*').order('name'),
-      supabase.from('grade_bands').select('*').order('min_score'),
+      api.from('school_settings').select('*').limit(1).maybeSingle(),
+      api.from('academic_sessions').select('*').order('name'),
+      api.from('terms').select('*').order('name'),
+      api.from('grade_bands').select('*').order('min_score'),
     ]);
     setSettings(s.data as SchoolSettings | null);
     setSessions(se.data ?? []);
     setTerms(t.data ?? []);
-    setGradeBands((bands.data ?? []).map((band) => ({ ...(band as GradeBand), clientId: band.id ?? makeClientId() })));
+    setGradeBands((bands.data ?? []).map((band: GradeBand) => ({ ...band, clientId: band.id ?? makeClientId() })));
     setLoading(false);
   }, []);
 
@@ -94,9 +94,9 @@ export function SettingsPage() {
     setUploadingLogo(true);
     const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
     const path = `school-logos/${settings.id}-${Date.now()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from('school-assets').upload(path, file, { upsert: true, contentType: file.type });
+    const { error: uploadError } = await api.storage.from('school-assets').upload(path, file, { upsert: true, contentType: file.type });
     if (uploadError) { setUploadingLogo(false); error(`Logo upload failed: ${uploadError.message}`); return; }
-    const { data } = supabase.storage.from('school-assets').getPublicUrl(path);
+    const { data } = api.storage.from('school-assets').getPublicUrl(path);
     update({ logo_url: data.publicUrl });
     setUploadingLogo(false);
     success('Logo uploaded. Save Settings to keep the new logo URL.');
@@ -111,7 +111,7 @@ export function SettingsPage() {
     if (maxima.some((value) => !Number.isInteger(value) || value < 0) || maxima.reduce((sum, value) => sum + value, 0) <= 0) { error('Assessment maximums must be whole numbers, non-negative, and have a total greater than zero.'); return; }
 
     setSaving(true);
-    const settingsResponse = await supabase.from('school_settings').update({
+    const settingsResponse = await api.from('school_settings').update({
       school_name: settings.school_name, address: settings.address, phone: settings.phone, email: settings.email, logo_url: settings.logo_url,
       motto: settings.motto, pass_percentage: settings.pass_percentage, ca1_max_score: settings.ca1_max_score, ca2_max_score: settings.ca2_max_score,
       ca3_max_score: settings.ca3_max_score, exam_max_score: settings.exam_max_score, current_session_id: settings.current_session_id, current_term_id: settings.current_term_id,
@@ -120,11 +120,11 @@ export function SettingsPage() {
     if (settingsResponse.error) { setSaving(false); error(`Failed to save school settings: ${settingsResponse.error.message}`); return; }
 
     if (deletedBandIds.length) {
-      const deletion = await supabase.from('grade_bands').delete().in('id', deletedBandIds);
+      const deletion = await api.from('grade_bands').delete().in('id', deletedBandIds);
       if (deletion.error) { setSaving(false); error(`Failed to delete grade bands: ${deletion.error.message}`); return; }
     }
     const bandPayload = gradeBands.map(({ clientId, ...band }) => ({ ...(band.id ? { id: band.id } : {}), min_score: band.min_score, max_score: band.max_score, grade: band.grade.trim(), remark: band.remark.trim() }));
-    const bandsResponse = await supabase.from('grade_bands').upsert(bandPayload);
+    const bandsResponse = await api.from('grade_bands').upsert(bandPayload);
     setSaving(false);
     if (bandsResponse.error) { error(`Failed to save grade bands: ${bandsResponse.error.message}`); return; }
     setDeletedBandIds([]);

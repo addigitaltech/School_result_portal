@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -32,9 +32,9 @@ export function TeachersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [t, s, c] = await Promise.all([
-      supabase.from('teachers').select('*').order('created_at', { ascending: false }),
-      supabase.from('subjects').select('*'),
-      supabase.from('classes').select('*').order('name'),
+      api.from('teachers').select('*').order('created_at', { ascending: false }),
+      api.from('subjects').select('*'),
+      api.from('classes').select('*').order('name'),
     ]);
     setTeachers(t.data ?? []);
     setSubjects(s.data ?? []);
@@ -84,15 +84,15 @@ export function TeachersPage() {
       class_ids: editing.class_ids ?? [],
     };
     const res = editing.id
-      ? await supabase.from('teachers').update(payload).eq('id', editing.id)
-      : await supabase.from('teachers').insert(payload);
+      ? await api.from('teachers').update(payload).eq('id', editing.id)
+      : await api.from('teachers').insert(payload);
     setSaving(false);
     if (res.error) { error('Failed to save teacher: ' + res.error.message); return; }
     // keep subjects in sync with teacher
     if (editing.id) {
-      await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', editing.id).not('id', 'in', `(${(editing.subject_ids ?? []).join(',')})`);
+      await api.from('subjects').update({ teacher_id: null }).eq('teacher_id', editing.id).not('id', 'in', `(${(editing.subject_ids ?? []).join(',')})`);
       for (const sid of editing.subject_ids ?? []) {
-        await supabase.from('subjects').update({ teacher_id: editing.id }).eq('id', sid);
+        await api.from('subjects').update({ teacher_id: editing.id }).eq('id', sid);
       }
     }
     success(editing.id ? 'Teacher updated successfully.' : 'Teacher added successfully.');
@@ -102,8 +102,8 @@ export function TeachersPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', deleteId);
-    const { error: err } = await supabase.from('teachers').delete().eq('id', deleteId);
+    await api.from('subjects').update({ teacher_id: null }).eq('teacher_id', deleteId);
+    const { error: err } = await api.from('teachers').delete().eq('id', deleteId);
     setDeleteId(null);
     if (err) { error('Failed to delete teacher.'); return; }
     success('Teacher deleted successfully.');

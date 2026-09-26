@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -23,7 +23,7 @@ export function SessionsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('academic_sessions').select('*').order('created_at', { ascending: false });
+    const { data } = await api.from('academic_sessions').select('*').order('created_at', { ascending: false });
     setSessions(data ?? []);
     setLoading(false);
   }, []);
@@ -40,16 +40,16 @@ export function SessionsPage() {
     const payload = { name: editing.name!.trim(), is_active: editing.is_active ?? false };
     let res;
     if (editing.id) {
-      res = await supabase.from('academic_sessions').update(payload).eq('id', editing.id);
+      res = await api.from('academic_sessions').update(payload).eq('id', editing.id);
     } else {
-      res = await supabase.from('academic_sessions').insert(payload);
+      res = await api.from('academic_sessions').insert(payload);
     }
     if (!res.error && editing.is_active) {
       // deactivate others + update school settings
       const newId = editing.id ?? (res.data as { id: string }[] | null)?.[0]?.id;
       if (newId) {
-        await supabase.from('academic_sessions').update({ is_active: false }).neq('id', newId);
-        await supabase.from('school_settings').update({ current_session_id: newId }).neq('id', '00000000-0000-0000-0000-000000000000');
+        await api.from('academic_sessions').update({ is_active: false }).neq('id', newId);
+        await api.from('school_settings').update({ current_session_id: newId }).neq('id', '00000000-0000-0000-0000-000000000000');
       }
     }
     setSaving(false);
@@ -60,16 +60,16 @@ export function SessionsPage() {
   };
 
   const setActive = async (s: AcademicSession) => {
-    await supabase.from('academic_sessions').update({ is_active: false }).neq('id', s.id);
-    await supabase.from('academic_sessions').update({ is_active: true }).eq('id', s.id);
-    await supabase.from('school_settings').update({ current_session_id: s.id }).neq('id', '00000000-0000-0000-0000-000000000000');
+    await api.from('academic_sessions').update({ is_active: false }).neq('id', s.id);
+    await api.from('academic_sessions').update({ is_active: true }).eq('id', s.id);
+    await api.from('school_settings').update({ current_session_id: s.id }).neq('id', '00000000-0000-0000-0000-000000000000');
     success(`${s.name} set as active session.`);
     load();
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: errm } = await supabase.from('academic_sessions').delete().eq('id', deleteId);
+    const { error: errm } = await api.from('academic_sessions').delete().eq('id', deleteId);
     setDeleteId(null);
     if (errm) { error('Failed to delete session.'); return; }
     success('Session deleted successfully.');

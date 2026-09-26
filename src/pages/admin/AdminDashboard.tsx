@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
 import { StatusBadge } from '@/components/ui/Badge';
@@ -25,13 +25,13 @@ export function AdminDashboard() {
   useEffect(() => {
     (async () => {
       const [s, t, c, sub, rPub, rPen, rDraft] = await Promise.all([
-        supabase.from('students').select('id', { count: 'exact', head: true }),
-        supabase.from('teachers').select('id', { count: 'exact', head: true }),
-        supabase.from('classes').select('id', { count: 'exact', head: true }),
-        supabase.from('subjects').select('id', { count: 'exact', head: true }),
-        supabase.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Published'),
-        supabase.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Pending'),
-        supabase.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Draft'),
+        api.from('students').select('id', { count: 'exact', head: true }),
+        api.from('teachers').select('id', { count: 'exact', head: true }),
+        api.from('classes').select('id', { count: 'exact', head: true }),
+        api.from('subjects').select('id', { count: 'exact', head: true }),
+        api.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Published'),
+        api.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Pending'),
+        api.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Draft'),
       ]);
       setStats({
         students: s.count ?? 0,
@@ -42,7 +42,7 @@ export function AdminDashboard() {
         pending: rPen.count ?? 0,
         draft: rDraft.count ?? 0,
       });
-      const { data } = await supabase.from('results').select('*').order('updated_at', { ascending: false }).limit(6);
+      const { data } = await api.from('results').select('*').order('updated_at', { ascending: false }).limit(6);
       setRecent(data ?? []);
       setLoading(false);
     })();

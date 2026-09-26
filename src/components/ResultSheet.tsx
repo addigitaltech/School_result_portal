@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { computeGrade, overallGrade } from '@/lib/grading';
 import { fullName } from '@/lib/format';
 import { Logo } from '@/components/Logo';
@@ -62,19 +62,19 @@ export function ResultSheet({ student, settings, session, term, results, classNa
     setLoadingStats(true);
     (async () => {
       const [remarkResponse, bandsResponse, traitsResponse, ratingsResponse, studentsResponse, armResponse] = await Promise.all([
-        supabase.from('term_remarks').select('*').eq('student_id', student.id).eq('session_id', session.id).eq('term_id', term.id).maybeSingle(),
-        supabase.from('grade_bands').select('*').order('min_score', { ascending: false }),
-        supabase.from('affective_traits').select('*').order('name'),
-        supabase.from('affective_ratings').select('*').eq('student_id', student.id).eq('session_id', session.id).eq('term_id', term.id),
-        student.class_id ? supabase.from('students').select('id, class_id, arm_id').eq('class_id', student.class_id) : Promise.resolve({ data: [] }),
-        student.arm_id ? supabase.from('arms').select('name').eq('id', student.arm_id).maybeSingle() : Promise.resolve({ data: null }),
+        api.from('term_remarks').select('*').eq('student_id', student.id).eq('session_id', session.id).eq('term_id', term.id).maybeSingle(),
+        api.from('grade_bands').select('*').order('min_score', { ascending: false }),
+        api.from('affective_traits').select('*').order('name'),
+        api.from('affective_ratings').select('*').eq('student_id', student.id).eq('session_id', session.id).eq('term_id', term.id),
+        student.class_id ? api.from('students').select('id, class_id, arm_id').eq('class_id', student.class_id) : Promise.resolve({ data: [] }),
+        student.arm_id ? api.from('arms').select('name').eq('id', student.arm_id).maybeSingle() : Promise.resolve({ data: null }),
       ]);
 
       const scopedStudents = (studentsResponse.data ?? []) as Pick<Student, 'id' | 'class_id' | 'arm_id'>[];
       const armStudentIds = scopedStudents.filter((row) => row.arm_id === student.arm_id).map((row) => row.id);
       let scopedResults: (Result & { subjects?: Subject })[] = [];
       if (armStudentIds.length) {
-        const { data } = await supabase.from('results').select('*, subjects(*)').in('student_id', armStudentIds).eq('session_id', session.id).eq('term_id', term.id).eq('status', 'Published');
+        const { data } = await api.from('results').select('*, subjects(*)').in('student_id', armStudentIds).eq('session_id', session.id).eq('term_id', term.id).eq('status', 'Published');
         scopedResults = (data ?? []) as (Result & { subjects?: Subject })[];
       }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -18,7 +18,7 @@ export function TeacherResultsPage() {
   useEffect(() => {
     if (!user?.teacher_id) { setLoading(false); return; }
     (async () => {
-      const { data } = await supabase
+      const { data } = await api
         .from('results')
         .select('*, students(*), subjects(*)')
         .eq('teacher_id', user.teacher_id)

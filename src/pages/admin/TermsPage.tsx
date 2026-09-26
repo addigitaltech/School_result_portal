@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -25,8 +25,8 @@ export function TermsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [t, s] = await Promise.all([
-      supabase.from('terms').select('*').order('created_at', { ascending: false }),
-      supabase.from('academic_sessions').select('*').order('name'),
+      api.from('terms').select('*').order('created_at', { ascending: false }),
+      api.from('academic_sessions').select('*').order('name'),
     ]);
     setTerms(t.data ?? []);
     setSessions(s.data ?? []);
@@ -47,13 +47,13 @@ export function TermsPage() {
     setSaving(true);
     const payload = { name: editing.name!.trim(), session_id: editing.session_id, is_current: editing.is_current ?? false };
     const res = editing.id
-      ? await supabase.from('terms').update(payload).eq('id', editing.id)
-      : await supabase.from('terms').insert(payload);
+      ? await api.from('terms').update(payload).eq('id', editing.id)
+      : await api.from('terms').insert(payload);
     if (!res.error && editing.is_current) {
       const newId = editing.id ?? (res.data as { id: string }[] | null)?.[0]?.id;
       if (newId) {
-        await supabase.from('terms').update({ is_current: false }).neq('id', newId);
-        await supabase.from('school_settings').update({ current_term_id: newId }).neq('id', '00000000-0000-0000-0000-000000000000');
+        await api.from('terms').update({ is_current: false }).neq('id', newId);
+        await api.from('school_settings').update({ current_term_id: newId }).neq('id', '00000000-0000-0000-0000-000000000000');
       }
     }
     setSaving(false);
@@ -64,16 +64,16 @@ export function TermsPage() {
   };
 
   const setCurrent = async (t: Term) => {
-    await supabase.from('terms').update({ is_current: false }).neq('id', t.id);
-    await supabase.from('terms').update({ is_current: true }).eq('id', t.id);
-    await supabase.from('school_settings').update({ current_term_id: t.id }).neq('id', '00000000-0000-0000-0000-000000000000');
+    await api.from('terms').update({ is_current: false }).neq('id', t.id);
+    await api.from('terms').update({ is_current: true }).eq('id', t.id);
+    await api.from('school_settings').update({ current_term_id: t.id }).neq('id', '00000000-0000-0000-0000-000000000000');
     success(`${t.name} set as current term.`);
     load();
   };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: errm } = await supabase.from('terms').delete().eq('id', deleteId);
+    const { error: errm } = await api.from('terms').delete().eq('id', deleteId);
     setDeleteId(null);
     if (errm) { error('Failed to delete term.'); return; }
     success('Term deleted successfully.');

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
@@ -20,12 +20,12 @@ export function TeacherDashboard() {
   useEffect(() => {
     if (!user?.teacher_id) { setLoading(false); return; }
     (async () => {
-      const { data: tch } = await supabase.from('teachers').select('*').eq('id', user.teacher_id).maybeSingle();
+      const { data: tch } = await api.from('teachers').select('*').eq('id', user.teacher_id).maybeSingle();
       setTeacher(tch as Teacher | null);
       const [subRes, clsRes, rRes] = await Promise.all([
-        supabase.from('subjects').select('*').in('id', (tch as Teacher)?.subject_ids ?? []),
-        supabase.from('classes').select('*').in('id', (tch as Teacher)?.class_ids ?? []),
-        supabase.from('results').select('*, students(*), subjects(*)').eq('teacher_id', user.teacher_id).order('updated_at', { ascending: false }).limit(8),
+        api.from('subjects').select('*').in('id', (tch as Teacher)?.subject_ids ?? []),
+        api.from('classes').select('*').in('id', (tch as Teacher)?.class_ids ?? []),
+        api.from('results').select('*, students(*), subjects(*)').eq('teacher_id', user.teacher_id).order('updated_at', { ascending: false }).limit(8),
       ]);
       setSubjects(subRes.data ?? []);
       setClasses(clsRes.data ?? []);

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { apiLogin } from '@/lib/api';
+import { apiLogin, apiLogout } from '@/lib/apiClient';
 import type { AppUser, Role } from '@/lib/types';
 
 interface AuthContextValue {
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
+    apiLogout();
   }, []);
 
   return (

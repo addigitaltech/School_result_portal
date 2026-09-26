@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
+import { apiReportCard } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Field';
@@ -24,17 +25,17 @@ export function StudentResultPage() {
   useEffect(() => {
     if (!user?.student_id) { setLoading(false); return; }
     (async () => {
-      const { data: stu } = await supabase.from('students').select('*').eq('id', user.student_id).maybeSingle();
+      const { data: stu } = await api.from('students').select('*').eq('id', user.student_id).maybeSingle();
       setStudent(stu as Student | null);
       if (stu?.class_id) {
-        const { data: cls } = await supabase.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
+        const { data: cls } = await api.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
         setClassName(cls?.name ?? '—');
       }
-      const { data: s } = await supabase.from('school_settings').select('*').limit(1).maybeSingle();
+      const { data: s } = await api.from('school_settings').select('*').limit(1).maybeSingle();
       setSettings(s as SchoolSettings | null);
-      const { data: sess } = await supabase.from('academic_sessions').select('*').order('name');
+      const { data: sess } = await api.from('academic_sessions').select('*').order('name');
       setSessions(sess ?? []);
-      const { data: t } = await supabase.from('terms').select('*').order('name');
+      const { data: t } = await api.from('terms').select('*').order('name');
       setTerms(t ?? []);
       // default to current
       if (s?.current_session_id) setSelectedSession(s.current_session_id);
@@ -47,14 +48,8 @@ export function StudentResultPage() {
     if (!selectedSession || !selectedTerm || !user?.student_id) { setResults([]); return; }
     setLoadingResults(true);
     (async () => {
-      const { data } = await supabase
-        .from('results')
-        .select('*, subjects(*)')
-        .eq('student_id', user.student_id!)
-        .eq('session_id', selectedSession)
-        .eq('term_id', selectedTerm)
-        .eq('status', 'Published');
-      setResults(data ?? []);
+      const data = await apiReportCard<(Result & { subjects?: Subject })>(user.student_id!, selectedSession, selectedTerm);
+      setResults(data);
       setLoadingResults(false);
     })();
   }, [selectedSession, selectedTerm, user]);

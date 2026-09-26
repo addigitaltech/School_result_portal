@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -27,12 +27,12 @@ export function ResultsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [r, s, t, c, sub, st] = await Promise.all([
-      supabase.from('results').select('*, students(*), subjects(*), classes(*)').order('updated_at', { ascending: false }),
-      supabase.from('academic_sessions').select('*').order('name'),
-      supabase.from('terms').select('*').order('name'),
-      supabase.from('classes').select('*').order('name'),
-      supabase.from('subjects').select('*').order('name'),
-      supabase.from('students').select('*').order('first_name'),
+      api.from('results').select('*, students(*), subjects(*), classes(*)').order('updated_at', { ascending: false }),
+      api.from('academic_sessions').select('*').order('name'),
+      api.from('terms').select('*').order('name'),
+      api.from('classes').select('*').order('name'),
+      api.from('subjects').select('*').order('name'),
+      api.from('students').select('*').order('first_name'),
     ]);
     setResults(r.data ?? []);
     setSessions(s.data ?? []);
@@ -64,7 +64,7 @@ export function ResultsPage() {
 
   const updateStatus = async () => {
     if (!statusTarget) return;
-    const { error: err } = await supabase.from('results').update({ status: statusTarget.status, updated_at: new Date().toISOString() }).eq('id', statusTarget.id);
+    const { error: err } = await api.from('results').update({ status: statusTarget.status, updated_at: new Date().toISOString() }).eq('id', statusTarget.id);
     setStatusTarget(null);
     if (err) { error('Failed to update result status.'); return; }
     success(`Result ${statusTarget.status === 'Published' ? 'published' : statusTarget.status === 'Pending' ? 'marked pending' : 'unpublished'} successfully.`);

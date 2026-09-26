@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -47,10 +47,10 @@ export function StudentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [st, cls, a, ca] = await Promise.all([
-      supabase.from('students').select('*').order('created_at', { ascending: false }),
-      supabase.from('classes').select('*').order('name'),
-      supabase.from('arms').select('*').order('name'),
-      supabase.from('class_arms').select('*'),
+      api.from('students').select('*').order('created_at', { ascending: false }),
+      api.from('classes').select('*').order('name'),
+      api.from('arms').select('*').order('name'),
+      api.from('class_arms').select('*'),
     ]);
     setStudents((st.data ?? []) as Student[]);
     setClasses(cls.data ?? []);
@@ -110,9 +110,9 @@ export function StudentsPage() {
     if (!photoFile) return editing?.photo_url ?? '';
     const extension = photoFile.name.split('.').pop()?.toLowerCase() || 'jpg';
     const path = `student-photos/${studentId}-${Date.now()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from('school-assets').upload(path, photoFile, { upsert: true, contentType: photoFile.type });
+    const { error: uploadError } = await api.storage.from('school-assets').upload(path, photoFile, { upsert: true, contentType: photoFile.type });
     if (uploadError) throw uploadError;
-    return supabase.storage.from('school-assets').getPublicUrl(path).data.publicUrl;
+    return api.storage.from('school-assets').getPublicUrl(path).data.publicUrl;
   };
 
   const save = async () => {
@@ -124,13 +124,13 @@ export function StudentsPage() {
       parent_guardian: editing.parent_guardian || null, parent_phone: editing.parent_phone || null, email: editing.email || null,
       admission_date: editing.admission_date || null, status: editing.status,
     };
-    const response = editing.id ? await supabase.from('students').update(payload).eq('id', editing.id).select('*').single() : await supabase.from('students').insert(payload).select('*').single();
+    const response = editing.id ? await api.from('students').update(payload).eq('id', editing.id).select('*').single() : await api.from('students').insert(payload).select('*').single();
     if (response.error || !response.data) { setSaving(false); error('Failed to save student: ' + (response.error?.message ?? 'No student returned')); return; }
     let savedStudent = response.data as Student;
     if (photoFile) {
       try {
         const photoUrl = await uploadPhoto(savedStudent.id);
-        const photoResponse = await supabase.from('students').update({ photo_url: photoUrl }).eq('id', savedStudent.id).select('*').single();
+        const photoResponse = await api.from('students').update({ photo_url: photoUrl }).eq('id', savedStudent.id).select('*').single();
         if (photoResponse.error || !photoResponse.data) throw photoResponse.error ?? new Error('Photo URL could not be saved');
         savedStudent = photoResponse.data as Student;
       } catch (photoError) {
@@ -141,7 +141,7 @@ export function StudentsPage() {
         return;
       }
     } else if (editing.id && editing.photo_url !== undefined && editing.photo_url !== savedStudent.photo_url) {
-      const photoResponse = await supabase.from('students').update({ photo_url: editing.photo_url || null }).eq('id', savedStudent.id).select('*').single();
+      const photoResponse = await api.from('students').update({ photo_url: editing.photo_url || null }).eq('id', savedStudent.id).select('*').single();
       if (!photoResponse.error && photoResponse.data) savedStudent = photoResponse.data as Student;
     }
     setSaving(false);
@@ -153,7 +153,7 @@ export function StudentsPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: deleteError } = await supabase.from('students').delete().eq('id', deleteId);
+    const { error: deleteError } = await api.from('students').delete().eq('id', deleteId);
     setDeleteId(null);
     if (deleteError) { error('Failed to delete student.'); return; }
     success('Student deleted successfully.');

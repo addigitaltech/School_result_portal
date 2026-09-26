@@ -1,5 +1,6 @@
 import express from 'express';
 import { apiRouter } from './api.js';
+import { uploadRouter } from './uploads.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 10000);
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api', apiRouter);
+app.use('/api/uploads', uploadRouter);
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`School Results API listening on port ${port}`);

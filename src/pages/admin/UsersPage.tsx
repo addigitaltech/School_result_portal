@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -30,10 +30,10 @@ export function UsersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [u, t, s, p] = await Promise.all([
-      supabase.from('app_users').select('*').order('created_at', { ascending: false }),
-      supabase.from('teachers').select('*'),
-      supabase.from('students').select('*'),
-      supabase.from('parents').select('*'),
+      api.from('app_users').select('*').order('created_at', { ascending: false }),
+      api.from('teachers').select('*'),
+      api.from('students').select('*'),
+      api.from('parents').select('*'),
     ]);
     setUsers(u.data ?? []);
     setTeachers(t.data ?? []);
@@ -75,7 +75,7 @@ export function UsersPage() {
       student_id: editing.student_id || null,
       parent_id: editing.parent_id || null,
     };
-    const res = await supabase.from('app_users').insert(payload);
+    const res = await api.from('app_users').insert(payload);
     setSaving(false);
     if (res.error) { error('Failed to create user.'); return; }
     success('User created successfully.');
@@ -85,7 +85,7 @@ export function UsersPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: errm } = await supabase.from('app_users').delete().eq('id', deleteId);
+    const { error: errm } = await api.from('app_users').delete().eq('id', deleteId);
     setDeleteId(null);
     if (errm) { error('Failed to delete user.'); return; }
     success('User deleted successfully.');

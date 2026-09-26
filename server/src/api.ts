@@ -141,6 +141,42 @@ apiRouter.post('/login', async (req, res) => {
 
 apiRouter.get('/me', requireAuth, (req: AuthedRequest, res) => res.json({ user: req.user }));
 
+apiRouter.get('/report-card/:studentId/:sessionId/:termId', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const studentId = req.params.studentId;
+  if (user.role === 'student' && user.student_id !== studentId) return jsonError(res, 'You are not authorized to view this report card.', 403);
+  if (user.role === 'parent') {
+    const linked = await query<{ student_id: string }>('SELECT student_id FROM parents WHERE id = $1', [user.parent_id]);
+    if (linked.rows[0]?.student_id !== studentId) return jsonError(res, 'You are not authorized to view this report card.', 403);
+  }
+  try {
+    const current = await query<Record<string, unknown>>(
+      `SELECT r.*, s.name AS subject_name, t.name AS term_name
+       FROM results r JOIN subjects s ON s.id = r.subject_id JOIN terms t ON t.id = r.term_id
+       WHERE r.student_id = $1 AND r.session_id = $2 AND r.term_id = $3 AND r.status = 'Published'
+       ORDER BY s.name`, [studentId, req.params.sessionId, req.params.termId],
+    );
+    const isThirdTerm = current.rows.some((row) => String(row.term_name).toLowerCase().includes('third'));
+    if (!isThirdTerm) return res.json({ data: current.rows.map((row) => ({ ...row, subjects: { name: row.subject_name } })) });
+    const annual = await query<{ subject_id: string; total_score: number; term_id: string }>(
+      `SELECT subject_id, total_score, term_id FROM results
+       WHERE student_id = $1 AND session_id = $2 AND status = 'Published' AND term_id IN (SELECT id FROM terms WHERE session_id = $2 AND lower(name) IN ('first term','second term','third term'))`,
+      [studentId, req.params.sessionId],
+    );
+    const grouped = new Map<string, number[]>();
+    for (const row of annual.rows) grouped.set(row.subject_id, [...(grouped.get(row.subject_id) ?? []), Number(row.total_score)]);
+    const data = current.rows.map((row) => {
+      const scores = grouped.get(String(row.subject_id)) ?? [Number(row.total_score)];
+      const cumulativeTotal = scores.reduce((sum, score) => sum + score, 0);
+      return { ...row, subjects: { name: row.subject_name }, cumulative_total: cumulativeTotal, cumulative_average: cumulativeTotal / scores.length, cumulative_terms_count: scores.length };
+    });
+    return res.json({ data });
+  } catch (error) {
+    console.error(error);
+    return jsonError(res, (error as Error).message, 500);
+  }
+});
+
 apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
   const table = Array.isArray(req.params.table) ? req.params.table[0] : req.params.table;
   if (!tables.has(table)) return jsonError(res, 'Unknown resource.', 404);
@@ -168,13 +204,17 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
     }
 
     if (!canWrite(user, table)) return jsonError(res, 'You are not authorized to modify this resource.', 403);
-    const body = req.body as Record<string, unknown>;
+    const bodyRows = (Array.isArray(req.body) ? req.body : [req.body]) as Record<string, unknown>[];
+    const body = bodyRows[0] ?? {};
     const validEntries = Object.entries(body).filter(([key]) => columns[table].has(key) && key !== 'id' && key !== 'total_score' && key !== 'created_at');
     if (req.method === 'POST') {
       const names = validEntries.map(([key]) => `"${key}"`).join(', ');
-      const placeholders = validEntries.map(([,], index) => `$${index + 1}`).join(', ');
-      const values = validEntries.map(([, value]) => value);
-      const result = await query(`INSERT INTO "${table}" (${names}) VALUES (${placeholders}) RETURNING *`, values);
+      const values = bodyRows.flatMap((row) => validEntries.map(([key]) => row[key]));
+      const placeholders = bodyRows.map((_, rowIndex) => `(${validEntries.map(([,], columnIndex) => `$${rowIndex * validEntries.length + columnIndex + 1}`).join(', ')})`).join(', ');
+      const conflictColumns = typeof req.query.upsert === 'string' ? req.query.upsert.split(',').filter((key) => columns[table].has(key)) : [];
+      const updates = validEntries.filter(([key]) => !conflictColumns.includes(key)).map(([key], index) => `"${key}" = EXCLUDED."${key}"`).join(', ');
+      const conflictSql = conflictColumns.length ? ` ON CONFLICT (${conflictColumns.map((key) => `"${key}"`).join(', ')}) DO UPDATE SET ${updates || `"${conflictColumns[0]}" = EXCLUDED."${conflictColumns[0]}"`}` : '';
+      const result = await query(`INSERT INTO "${table}" (${names}) VALUES ${placeholders}${conflictSql} RETURNING *`, values);
       return res.status(201).json({ data: result.rows });
     }
 

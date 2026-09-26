@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -21,23 +21,23 @@ export function ParentDashboard() {
   useEffect(() => {
     if (!user?.parent_id) { setLoading(false); return; }
     (async () => {
-      const { data: par } = await supabase.from('parents').select('*').eq('id', user.parent_id).maybeSingle();
+      const { data: par } = await api.from('parents').select('*').eq('id', user.parent_id).maybeSingle();
       setParent(par as Parent | null);
       if (par?.student_id) {
-        const { data: stu } = await supabase.from('students').select('*').eq('id', par.student_id).maybeSingle();
+        const { data: stu } = await api.from('students').select('*').eq('id', par.student_id).maybeSingle();
         setStudent(stu as Student | null);
         if (stu?.class_id) {
-          const { data: cls } = await supabase.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
+          const { data: cls } = await api.from('classes').select('name').eq('id', stu.class_id).maybeSingle();
           setClassName(cls?.name ?? '—');
         }
       }
-      const { data: s } = await supabase.from('school_settings').select('current_session_id, current_term_id').limit(1).maybeSingle();
+      const { data: s } = await api.from('school_settings').select('current_session_id, current_term_id').limit(1).maybeSingle();
       if (s?.current_session_id) {
-        const { data: sess } = await supabase.from('academic_sessions').select('*').eq('id', s.current_session_id).maybeSingle();
+        const { data: sess } = await api.from('academic_sessions').select('*').eq('id', s.current_session_id).maybeSingle();
         setSession(sess as AcademicSession | null);
       }
       if (s?.current_term_id) {
-        const { data: t } = await supabase.from('terms').select('*').eq('id', s.current_term_id).maybeSingle();
+        const { data: t } = await api.from('terms').select('*').eq('id', s.current_term_id).maybeSingle();
         setTerm(t as Term | null);
       }
       setLoading(false);

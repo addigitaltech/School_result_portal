@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
@@ -16,11 +16,11 @@ export function TeacherProfile() {
   useEffect(() => {
     if (!user?.teacher_id) { setLoading(false); return; }
     (async () => {
-      const { data: tch } = await supabase.from('teachers').select('*').eq('id', user.teacher_id).maybeSingle();
+      const { data: tch } = await api.from('teachers').select('*').eq('id', user.teacher_id).maybeSingle();
       setTeacher(tch as Teacher | null);
       const [s, c] = await Promise.all([
-        supabase.from('subjects').select('*').in('id', tch?.subject_ids ?? []),
-        supabase.from('classes').select('*').in('id', tch?.class_ids ?? []),
+        api.from('subjects').select('*').in('id', tch?.subject_ids ?? []),
+        api.from('classes').select('*').in('id', tch?.class_ids ?? []),
       ]);
       setSubjects(s.data ?? []);
       setClasses(c.data ?? []);

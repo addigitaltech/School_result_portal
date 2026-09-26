@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -35,11 +35,11 @@ export function ClassesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [c, t, s, a, ca] = await Promise.all([
-      supabase.from('classes').select('*').order('name'),
-      supabase.from('teachers').select('*').order('full_name'),
-      supabase.from('students').select('class_id'),
-      supabase.from('arms').select('*').order('name'),
-      supabase.from('class_arms').select('*'),
+      api.from('classes').select('*').order('name'),
+      api.from('teachers').select('*').order('full_name'),
+      api.from('students').select('class_id'),
+      api.from('arms').select('*').order('name'),
+      api.from('class_arms').select('*'),
     ]);
     setClasses(c.data ?? []);
     setTeachers(t.data ?? []);
@@ -69,8 +69,8 @@ export function ClassesPage() {
     setSaving(true);
     const payload = { name: editing.name!.trim(), class_teacher_id: editing.class_teacher_id || null };
     const res = editing.id
-      ? await supabase.from('classes').update(payload).eq('id', editing.id)
-      : await supabase.from('classes').insert(payload);
+      ? await api.from('classes').update(payload).eq('id', editing.id)
+      : await api.from('classes').insert(payload);
     setSaving(false);
     if (res.error) { error('Failed to save class.'); return; }
     success(editing.id ? 'Class updated successfully.' : 'Class added successfully.');
@@ -80,7 +80,7 @@ export function ClassesPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error: err } = await supabase.from('classes').delete().eq('id', deleteId);
+    const { error: err } = await api.from('classes').delete().eq('id', deleteId);
     setDeleteId(null);
     if (err) { error('Failed to delete class.'); return; }
     success('Class deleted successfully.');
@@ -100,8 +100,8 @@ export function ClassesPage() {
     setArmSaving(true);
     const payload = { name: armEditing.name!.trim() };
     const res = armEditing.id
-      ? await supabase.from('arms').update(payload).eq('id', armEditing.id)
-      : await supabase.from('arms').insert(payload);
+      ? await api.from('arms').update(payload).eq('id', armEditing.id)
+      : await api.from('arms').insert(payload);
     setArmSaving(false);
     if (res.error) { error('Failed to save arm.'); return; }
     success(armEditing.id ? 'Arm updated successfully.' : 'Arm added successfully.');
@@ -111,7 +111,7 @@ export function ClassesPage() {
 
   const confirmArmDelete = async () => {
     if (!armDeleteId) return;
-    const { error: err } = await supabase.from('arms').delete().eq('id', armDeleteId);
+    const { error: err } = await api.from('arms').delete().eq('id', armDeleteId);
     setArmDeleteId(null);
     if (err) { error('Failed to delete arm.'); return; }
     success('Arm deleted successfully.');
@@ -126,10 +126,10 @@ export function ClassesPage() {
   const saveAssignment = async () => {
     if (!assignmentClass) return;
     setAssignmentSaving(true);
-    const { error: deleteError } = await supabase.from('class_arms').delete().eq('class_id', assignmentClass.id);
+    const { error: deleteError } = await api.from('class_arms').delete().eq('class_id', assignmentClass.id);
     if (deleteError) { setAssignmentSaving(false); error('Failed to update class arms.'); return; }
     if (selectedArmIds.length > 0) {
-      const { error: insertError } = await supabase.from('class_arms').insert(selectedArmIds.map((arm_id) => ({ class_id: assignmentClass.id, arm_id })));
+      const { error: insertError } = await api.from('class_arms').insert(selectedArmIds.map((arm_id) => ({ class_id: assignmentClass.id, arm_id })));
       if (insertError) { setAssignmentSaving(false); error('Failed to update class arms.'); return; }
     }
     setAssignmentSaving(false);
