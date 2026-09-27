@@ -8,6 +8,7 @@ import { FullPageLoader } from '@/components/ui/Feedback';
 import { LoginPage } from '@/pages/LoginPage';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { StudentsPage } from '@/pages/admin/StudentsPage';
+import { ParentsPage } from '@/pages/admin/ParentsPage';
 import { TeachersPage } from '@/pages/admin/TeachersPage';
 import { ClassesPage } from '@/pages/admin/ClassesPage';
 import { SubjectsPage } from '@/pages/admin/SubjectsPage';
@@ -18,6 +19,7 @@ import { UsersPage } from '@/pages/admin/UsersPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { TeacherDashboard } from '@/pages/teacher/TeacherDashboard';
 import { TeacherResultsPage } from '@/pages/teacher/TeacherResultsPage';
+import { TeacherSubjectsPage } from '@/pages/teacher/TeacherSubjectsPage';
 import { TeacherProfile } from '@/pages/teacher/TeacherProfile';
 import { StudentDashboard } from '@/pages/student/StudentDashboard';
 import { StudentResultPage } from '@/pages/student/StudentResultPage';
@@ -55,6 +57,7 @@ function AppRoutes() {
       {/* Admin */}
       <Route path="/admin" element={<RequireAuth roles={['admin']}><DashboardLayout><AdminDashboard /></DashboardLayout></RequireAuth>} />
       <Route path="/admin/students" element={<RequireAuth roles={['admin']}><DashboardLayout><StudentsPage /></DashboardLayout></RequireAuth>} />
+      <Route path="/admin/parents" element={<RequireAuth roles={['admin']}><DashboardLayout><ParentsPage /></DashboardLayout></RequireAuth>} />
       <Route path="/admin/teachers" element={<RequireAuth roles={['admin']}><DashboardLayout><TeachersPage /></DashboardLayout></RequireAuth>} />
       <Route path="/admin/classes" element={<RequireAuth roles={['admin']}><DashboardLayout><ClassesPage /></DashboardLayout></RequireAuth>} />
       <Route path="/admin/subjects" element={<RequireAuth roles={['admin']}><DashboardLayout><SubjectsPage /></DashboardLayout></RequireAuth>} />
@@ -68,6 +71,7 @@ function AppRoutes() {
       {/* Teacher */}
       <Route path="/teacher" element={<RequireAuth roles={['teacher']}><DashboardLayout><TeacherDashboard /></DashboardLayout></RequireAuth>} />
       <Route path="/teacher/results" element={<RequireAuth roles={['teacher']}><DashboardLayout><TeacherResultsPage /></DashboardLayout></RequireAuth>} />
+      <Route path="/teacher/subjects" element={<RequireAuth roles={['teacher']}><DashboardLayout><TeacherSubjectsPage /></DashboardLayout></RequireAuth>} />
       <Route path="/teacher/results/entry" element={<RequireAuth roles={['teacher']}><DashboardLayout><ResultEntryPage /></DashboardLayout></RequireAuth>} />
       <Route path="/teacher/profile" element={<RequireAuth roles={['teacher']}><DashboardLayout><TeacherProfile /></DashboardLayout></RequireAuth>} />
 

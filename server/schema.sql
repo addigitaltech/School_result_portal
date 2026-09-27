@@ -18,6 +18,7 @@ CREATE TABLE school_settings (
   ca2_max_score integer NOT NULL DEFAULT 0 CHECK (ca2_max_score >= 0),
   ca3_max_score integer NOT NULL DEFAULT 0 CHECK (ca3_max_score >= 0),
   exam_max_score integer NOT NULL DEFAULT 60 CHECK (exam_max_score >= 0),
+  highlight_fail_grade boolean NOT NULL DEFAULT true,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -75,6 +76,7 @@ CREATE TABLE subjects (
   code text NOT NULL UNIQUE,
   name text NOT NULL,
   class_id uuid REFERENCES classes(id) ON DELETE SET NULL,
+  arm_id uuid REFERENCES arms(id) ON DELETE SET NULL, -- NULL = applies to every arm in the class
   teacher_id uuid REFERENCES teachers(id) ON DELETE SET NULL,
   status text NOT NULL DEFAULT 'Active',
   created_at timestamptz NOT NULL DEFAULT now()

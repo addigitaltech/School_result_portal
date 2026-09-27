@@ -3,7 +3,7 @@ import type { Role } from '@/lib/types';
 import { Logo } from '@/components/Logo';
 import {
   LayoutDashboard, Users, UserCog, School, BookOpen, ClipboardList,
-  Calendar, CalendarDays, Users2, Settings, User, LogOut, X,
+  Calendar, CalendarDays, Users2, Settings, User, LogOut, X, Contact,
 } from 'lucide-react';
 
 interface NavItem {
@@ -15,6 +15,7 @@ interface NavItem {
 const adminNav: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
   { to: '/admin/students', label: 'Students', icon: <Users className="h-5 w-5" /> },
+  { to: '/admin/parents', label: 'Parents', icon: <Contact className="h-5 w-5" /> },
   { to: '/admin/teachers', label: 'Teachers', icon: <UserCog className="h-5 w-5" /> },
   { to: '/admin/classes', label: 'Classes', icon: <School className="h-5 w-5" /> },
   { to: '/admin/subjects', label: 'Subjects', icon: <BookOpen className="h-5 w-5" /> },
@@ -28,6 +29,7 @@ const adminNav: NavItem[] = [
 const teacherNav: NavItem[] = [
   { to: '/teacher', label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
   { to: '/teacher/results', label: 'Result Entry', icon: <ClipboardList className="h-5 w-5" /> },
+  { to: '/teacher/subjects', label: 'My Subjects', icon: <BookOpen className="h-5 w-5" /> },
   { to: '/teacher/profile', label: 'My Profile', icon: <UserCog className="h-5 w-5" /> },
 ];
 

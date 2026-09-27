@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api } from '@/lib/apiClient';
+import { api, apiCreateUser, apiUpdateUser } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,9 +9,13 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
 import type { AppUser, Role, Teacher, Student, Parent } from '@/lib/types';
-import { Users2, Plus, Trash2, Search } from 'lucide-react';
+import { Users2, Plus, Trash2, Search, KeyRound } from 'lucide-react';
 
-const empty: Partial<AppUser> = { email: '', password_hash: '', role: 'teacher', display_name: '', teacher_id: null, student_id: null, parent_id: null };
+interface EditableUser extends Partial<AppUser> {
+  password?: string;
+}
+
+const empty: EditableUser = { email: '', password: '', role: 'teacher', display_name: '', teacher_id: null, student_id: null, parent_id: null };
 
 export function UsersPage() {
   const { success, error } = useToast();
@@ -22,10 +26,14 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Partial<AppUser> | null>(null);
+  const [editing, setEditing] = useState<EditableUser | null>(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<AppUser | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,8 +64,8 @@ export function UsersPage() {
     if (!editing?.email?.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editing.email)) e.email = 'Invalid email';
     else if (users.some((u) => u.email === editing.email?.trim().toLowerCase() && u.id !== editing.id)) e.email = 'Email already exists';
-    if (!editing?.password_hash?.trim()) e.password_hash = 'Password is required';
-    else if (editing.password_hash.length < 6) e.password_hash = 'Password must be at least 6 characters';
+    if (!editing?.password?.trim()) e.password = 'Password is required';
+    else if (editing.password.length < 6) e.password = 'Password must be at least 6 characters';
     if (!editing?.display_name?.trim()) e.display_name = 'Display name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -66,21 +74,33 @@ export function UsersPage() {
   const save = async () => {
     if (!editing || !validate()) return;
     setSaving(true);
-    const payload = {
+    const res = await apiCreateUser({
       email: editing.email!.trim().toLowerCase(),
-      password_hash: editing.password_hash!,
+      password: editing.password!,
       role: editing.role as Role,
       display_name: editing.display_name!.trim(),
       teacher_id: editing.teacher_id || null,
       student_id: editing.student_id || null,
       parent_id: editing.parent_id || null,
-    };
-    const res = await api.from('app_users').insert(payload);
+    });
     setSaving(false);
-    if (res.error) { error('Failed to create user.'); return; }
+    if (res.error) { error(res.error.message || 'Failed to create user.'); return; }
     success('User created successfully.');
     setModalOpen(false);
     load();
+  };
+
+  const openReset = (user: AppUser) => { setResetTarget(user); setResetPassword(''); setResetError(''); };
+
+  const confirmReset = async () => {
+    if (!resetTarget) return;
+    if (resetPassword.length < 6) { setResetError('Password must be at least 6 characters.'); return; }
+    setResetting(true);
+    const res = await apiUpdateUser(resetTarget.id, { password: resetPassword });
+    setResetting(false);
+    if (res.error) { setResetError(res.error.message || 'Failed to reset password.'); return; }
+    success(`Password reset for ${resetTarget.email}.`);
+    setResetTarget(null);
   };
 
   const confirmDelete = async () => {
@@ -136,7 +156,10 @@ export function UsersPage() {
                     <td className="px-5 py-3 text-slate-600">{u.email}</td>
                     <td className="px-5 py-3"><Badge variant={roleVariant[u.role]}>{u.role}</Badge></td>
                     <td className="px-5 py-3 text-right">
-                      <button onClick={() => setDeleteId(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                      <div className="inline-flex items-center gap-1">
+                        <button onClick={() => openReset(u)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Reset Password"><KeyRound className="h-4 w-4" /></button>
+                        <button onClick={() => setDeleteId(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -156,8 +179,8 @@ export function UsersPage() {
             <Field label="Email" required error={errors.email}>
               <Input type="email" value={editing.email ?? ''} error={!!errors.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
             </Field>
-            <Field label="Password" required error={errors.password_hash} hint="Minimum 6 characters">
-              <Input value={editing.password_hash ?? ''} error={!!errors.password_hash} onChange={(e) => setEditing({ ...editing, password_hash: e.target.value })} />
+            <Field label="Password" required error={errors.password} hint="Minimum 6 characters">
+              <Input value={editing.password ?? ''} error={!!errors.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} />
             </Field>
             <Field label="Role" required>
               <Select value={editing.role ?? 'teacher'} onChange={(e) => setEditing({ ...editing, role: e.target.value as Role, teacher_id: null, student_id: null, parent_id: null })}>
@@ -196,6 +219,13 @@ export function UsersPage() {
       </Modal>
 
       <ConfirmDialog open={!!deleteId} title="Delete User" message="Are you sure you want to delete this user account?" confirmLabel="Delete" onConfirm={confirmDelete} onCancel={() => setDeleteId(null)} />
+
+      <Modal open={!!resetTarget} onClose={() => setResetTarget(null)} title={resetTarget ? `Reset Password — ${resetTarget.email}` : ''} size="sm"
+        footer={<><Button variant="secondary" onClick={() => setResetTarget(null)}>Cancel</Button><Button onClick={confirmReset} disabled={resetting}>{resetting ? 'Resetting...' : 'Reset Password'}</Button></>}>
+        <Field label="New Password" required error={resetError} hint="Minimum 6 characters">
+          <Input value={resetPassword} error={!!resetError} onChange={(e) => { setResetPassword(e.target.value); setResetError(''); }} />
+        </Field>
+      </Modal>
     </div>
   );
 }

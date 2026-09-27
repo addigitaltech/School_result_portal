@@ -4,13 +4,14 @@ import { api } from '@/lib/apiClient';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Users, UserCog, School, BookOpen, ClipboardList, Clock, ArrowRight, UserPlus, BookPlus, ClipboardCheck } from 'lucide-react';
+import { Users, UserCog, School, Layers, BookOpen, ClipboardList, Clock, ArrowRight, UserPlus, BookPlus, ClipboardCheck } from 'lucide-react';
 import type { Result } from '@/lib/types';
 
 interface Stats {
   students: number;
   teachers: number;
   classes: number;
+  arms: number;
   subjects: number;
   published: number;
   pending: number;
@@ -24,10 +25,11 @@ export function AdminDashboard() {
 
   useEffect(() => {
     (async () => {
-      const [s, t, c, sub, rPub, rPen, rDraft] = await Promise.all([
+      const [s, t, c, arm, sub, rPub, rPen, rDraft] = await Promise.all([
         api.from('students').select('id', { count: 'exact', head: true }),
         api.from('teachers').select('id', { count: 'exact', head: true }),
         api.from('classes').select('id', { count: 'exact', head: true }),
+        api.from('arms').select('id', { count: 'exact', head: true }),
         api.from('subjects').select('id', { count: 'exact', head: true }),
         api.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Published'),
         api.from('results').select('id', { count: 'exact', head: true }).eq('status', 'Pending'),
@@ -37,6 +39,7 @@ export function AdminDashboard() {
         students: s.count ?? 0,
         teachers: t.count ?? 0,
         classes: c.count ?? 0,
+        arms: arm.count ?? 0,
         subjects: sub.count ?? 0,
         published: rPub.count ?? 0,
         pending: rPen.count ?? 0,
@@ -56,6 +59,7 @@ export function AdminDashboard() {
     { label: 'Total Students', value: stats.students, icon: <Users className="h-5 w-5" />, color: 'bg-blue-50 text-blue-600', to: '/admin/students' },
     { label: 'Total Teachers', value: stats.teachers, icon: <UserCog className="h-5 w-5" />, color: 'bg-emerald-50 text-emerald-600', to: '/admin/teachers' },
     { label: 'Total Classes', value: stats.classes, icon: <School className="h-5 w-5" />, color: 'bg-amber-50 text-amber-600', to: '/admin/classes' },
+    { label: 'Total Arms', value: stats.arms, icon: <Layers className="h-5 w-5" />, color: 'bg-indigo-50 text-indigo-600', to: '/admin/classes' },
     { label: 'Total Subjects', value: stats.subjects, icon: <BookOpen className="h-5 w-5" />, color: 'bg-purple-50 text-purple-600', to: '/admin/subjects' },
     { label: 'Published Results', value: stats.published, icon: <ClipboardCheck className="h-5 w-5" />, color: 'bg-teal-50 text-teal-600', to: '/admin/results' },
     { label: 'Pending Results', value: stats.pending + stats.draft, icon: <Clock className="h-5 w-5" />, color: 'bg-rose-50 text-rose-600', to: '/admin/results' },

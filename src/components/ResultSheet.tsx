@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/apiClient';
 import { computeGrade, overallGrade } from '@/lib/grading';
-import { fullName } from '@/lib/format';
+import { fullName, formatDate, calculateAge } from '@/lib/format';
 import { Logo } from '@/components/Logo';
 import type { Student, SchoolSettings, AcademicSession, Term, Result, Subject, TermRemark, GradeBand, AffectiveTrait, AffectiveRating } from '@/lib/types';
 import { Printer, Download } from 'lucide-react';
@@ -95,6 +95,13 @@ export function ResultSheet({ student, settings, session, term, results, classNa
   }, [student.id, student.class_id, session?.id, term?.id]);
 
   const offeredResults = results.filter((result) => result.is_offered !== false);
+  const highlightFail = settings?.highlight_fail_grade !== false; // default ON when the setting is missing/undefined
+  const gradeClass = (grade: string | null | undefined) => highlightFail && grade === 'F' ? 'text-red-600' : 'text-blue-700';
+  const isAnnualView = offeredResults.some((result) => result.cumulative_total !== undefined);
+  const annualAverage = isAnnualView && offeredResults.length
+    ? Math.round(offeredResults.reduce((sum, result) => sum + (result.cumulative_average ?? result.total_score), 0) / offeredResults.length)
+    : null;
+  const { grade: annualGrade, remark: annualRemark } = overallGrade(annualAverage ?? 0, gradeBands);
   const totalMax = (settings?.ca1_max_score ?? 40) + (settings?.ca2_max_score ?? 0) + (settings?.ca3_max_score ?? 0) + (settings?.exam_max_score ?? 60);
   const caMax = (settings?.ca1_max_score ?? 40) + (settings?.ca2_max_score ?? 0) + (settings?.ca3_max_score ?? 0);
   const examMax = settings?.exam_max_score ?? 60;
@@ -182,19 +189,30 @@ export function ResultSheet({ student, settings, session, term, results, classNa
           <div><span className="text-slate-500">Term:</span> <span className="font-semibold text-slate-800">{term?.name ?? '—'}</span></div>
           <div><span className="text-slate-500">Gender:</span> <span className="font-semibold text-slate-800">{student.gender ?? '—'}</span></div>
           <div><span className="text-slate-500">Arm:</span> <span className="font-semibold text-slate-800">{armName || '—'}</span></div>
+          <div><span className="text-slate-500">Date of Birth:</span> <span className="font-semibold text-slate-800">{formatDate(student.date_of_birth)}</span></div>
+          <div><span className="text-slate-500">Age:</span> <span className="font-semibold text-slate-800">{calculateAge(student.date_of_birth) !== null ? `${calculateAge(student.date_of_birth)} years` : '—'}</span></div>
         </div>
 
         <table className="w-full text-sm border border-slate-300 mb-4">
-          <thead className="bg-slate-800 text-white text-xs uppercase"><tr><th className="text-left px-3 py-2 border border-slate-400">Subject</th><th className="text-center px-3 py-2 border border-slate-400">CA ({caMax})</th><th className="text-center px-3 py-2 border border-slate-400">Exam ({examMax})</th><th className="text-center px-3 py-2 border border-slate-400">Total ({totalMax})</th><th className="text-center px-3 py-2 border border-slate-400">Grade</th><th className="text-left px-3 py-2 border border-slate-400">Remark</th></tr></thead>
-          <tbody>{offeredResults.length === 0 ? <tr><td colSpan={6} className="text-center py-8 text-slate-400 border border-slate-300">No published results available for this term.</td></tr> : offeredResults.map((result) => <tr key={result.id} className="even:bg-slate-50"><td className="px-3 py-2 border border-slate-300 font-medium text-slate-800">{result.subjects?.name ?? '—'}</td><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.ca1_score + result.ca2_score + result.ca3_score}</td><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.exam_score}</td><td className="px-3 py-2 border border-slate-300 text-center font-semibold text-slate-900">{result.total_score}</td><td className="px-3 py-2 border border-slate-300 text-center font-bold text-blue-700">{result.grade ?? computeGrade(result.total_score, gradeBands).grade}</td><td className="px-3 py-2 border border-slate-300 text-slate-600">{result.remark ?? computeGrade(result.total_score, gradeBands).remark}</td></tr>)}</tbody>
+          <thead className="bg-slate-800 text-white text-xs uppercase"><tr><th className="text-left px-3 py-2 border border-slate-400">Subject</th><th className="text-center px-3 py-2 border border-slate-400">CA ({caMax})</th><th className="text-center px-3 py-2 border border-slate-400">Exam ({examMax})</th><th className="text-center px-3 py-2 border border-slate-400">Total ({totalMax})</th><th className="text-center px-3 py-2 border border-slate-400">Grade</th><th className="text-left px-3 py-2 border border-slate-400">Remark</th>{isAnnualView && <><th className="text-center px-3 py-2 border border-slate-400">Annual Total</th><th className="text-center px-3 py-2 border border-slate-400">Annual Avg</th></>}</tr></thead>
+          <tbody>{offeredResults.length === 0 ? <tr><td colSpan={isAnnualView ? 8 : 6} className="text-center py-8 text-slate-400 border border-slate-300">No published results available for this term.</td></tr> : offeredResults.map((result) => <tr key={result.id} className="even:bg-slate-50"><td className="px-3 py-2 border border-slate-300 font-medium text-slate-800">{result.subjects?.name ?? '—'}</td><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.ca1_score + result.ca2_score + result.ca3_score}</td><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.exam_score}</td><td className="px-3 py-2 border border-slate-300 text-center font-semibold text-slate-900">{result.total_score}</td><td className={`px-3 py-2 border border-slate-300 text-center font-bold ${gradeClass(result.grade ?? computeGrade(result.total_score, gradeBands).grade)}`}>{result.grade ?? computeGrade(result.total_score, gradeBands).grade}</td><td className="px-3 py-2 border border-slate-300 text-slate-600">{result.remark ?? computeGrade(result.total_score, gradeBands).remark}</td>{isAnnualView && <><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.cumulative_total ?? '—'}</td><td className="px-3 py-2 border border-slate-300 text-center text-slate-700">{result.cumulative_average !== undefined ? Math.round(result.cumulative_average) : '—'}{result.cumulative_terms_count !== undefined && result.cumulative_terms_count < 3 && <span className="text-amber-600" title="Fewer than 3 terms have a saved score for this subject">*</span>}</td></>}</tr>)}</tbody>
         </table>
+        {isAnnualView && <p className="text-xs text-slate-400 -mt-3 mb-4">Annual figures combine First, Second and Third Term scores for this session. * = one or more earlier terms had no saved score for that subject, so the average is taken over the terms actually recorded.</p>}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div className="bg-blue-50 p-3 rounded-lg text-center"><p className="text-xs text-slate-500">Total Score</p><p className="text-xl font-bold text-slate-800">{totalScore}</p></div>
           <div className="bg-emerald-50 p-3 rounded-lg text-center"><p className="text-xs text-slate-500">Average Score</p><p className="text-xl font-bold text-slate-800">{averageScore}</p></div>
-          <div className="bg-amber-50 p-3 rounded-lg text-center"><p className="text-xs text-slate-500">Overall Grade</p><p className="text-xl font-bold text-blue-700">{overallG}</p></div>
+          <div className="bg-amber-50 p-3 rounded-lg text-center"><p className="text-xs text-slate-500">Overall Grade</p><p className={`text-xl font-bold ${gradeClass(overallG)}`}>{overallG}</p></div>
           <div className="bg-slate-100 p-3 rounded-lg text-center"><p className="text-xs text-slate-500">Overall Remark</p><p className="text-sm font-semibold text-slate-800">{overallR}</p></div>
         </div>
+
+        {isAnnualView && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4 border-2 border-blue-200 bg-blue-50/50 rounded-lg p-3">
+            <div className="text-center"><p className="text-xs text-slate-500">Annual Average (3 terms)</p><p className="text-xl font-bold text-slate-800">{annualAverage}</p></div>
+            <div className="text-center"><p className="text-xs text-slate-500">Annual Grade</p><p className={`text-xl font-bold ${gradeClass(annualGrade)}`}>{annualGrade}</p></div>
+            <div className="text-center col-span-2 sm:col-span-1"><p className="text-xs text-slate-500">Promotion Remark</p><p className="text-sm font-semibold text-slate-800">{annualRemark}</p></div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-sm">
           <div className="border border-slate-200 rounded-lg p-3"><p className="text-slate-500 text-xs">Class Term Position</p><p className="font-semibold text-slate-800">{loadingStats ? 'Loading…' : classPosition ? `${classPosition} / ${studentMetrics.length}` : '—'}</p></div>

@@ -3,7 +3,7 @@ import { api } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Feedback';
-import { fullName, formatDate } from '@/lib/format';
+import { fullName, formatDate, calculateAge } from '@/lib/format';
 import type { Student } from '@/lib/types';
 import { Mail, Phone, Calendar, User, BookOpen } from 'lucide-react';
 
@@ -31,7 +31,7 @@ export function StudentProfile() {
 
   const rows: [string, string | null][] = [
     ['Student ID', student.student_id], ['First Name', student.first_name], ['Last Name', student.last_name], ['Other Name', student.other_name || '—'],
-    ['Gender', student.gender], ['Date of Birth', formatDate(student.date_of_birth)], ['Class', className], ['Parent/Guardian', student.parent_guardian],
+    ['Gender', student.gender], ['Date of Birth', formatDate(student.date_of_birth)], ['Age', calculateAge(student.date_of_birth) !== null ? `${calculateAge(student.date_of_birth)} years` : null], ['Class', className], ['Parent/Guardian', student.parent_guardian],
     ['Parent Phone', student.parent_phone], ['Email', student.email], ['Admission Date', formatDate(student.admission_date)], ['Status', student.status],
   ];
 

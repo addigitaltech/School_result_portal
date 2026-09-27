@@ -115,3 +115,34 @@ export async function apiReportCard<T = any>(studentId: string, sessionId: strin
 }
 
 export function apiLogout() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('srp_current_user'); }
+
+export interface CreateUserPayload {
+  email: string;
+  password: string;
+  display_name: string;
+  role: 'admin' | 'teacher' | 'student' | 'parent';
+  teacher_id?: string | null;
+  student_id?: string | null;
+  parent_id?: string | null;
+}
+
+/** Creates a login account. Always goes through this dedicated endpoint (never api.from('app_users').insert),
+ *  since only this endpoint hashes the password server-side before it touches the database. */
+export async function apiCreateUser(payload: CreateUserPayload): Promise<{ data: unknown; error: Error | null }> {
+  try {
+    const response = await request<{ data: unknown }>('/users', { method: 'POST', body: JSON.stringify(payload) });
+    return { data: response.data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+}
+
+/** Updates a login account's profile fields and/or resets its password. Same reasoning as apiCreateUser. */
+export async function apiUpdateUser(id: string, payload: Partial<Pick<CreateUserPayload, 'email' | 'display_name' | 'password'>>): Promise<{ data: unknown; error: Error | null }> {
+  try {
+    const response = await request<{ data: unknown }>(`/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+    return { data: response.data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+}

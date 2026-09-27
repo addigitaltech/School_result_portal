@@ -3,7 +3,8 @@ export type Role = 'admin' | 'teacher' | 'student' | 'parent';
 export interface AppUser {
   id: string;
   email: string;
-  password_hash: string;
+  /** Never sent by the API — accounts are created/updated via apiCreateUser/apiUpdateUser, which hash server-side. */
+  password_hash?: never;
   role: Role;
   display_name: string;
   teacher_id: string | null;
@@ -27,6 +28,8 @@ export interface SchoolSettings {
   ca2_max_score: number;
   ca3_max_score: number;
   exam_max_score: number;
+  /** When true (the default), an F grade is shown in red on printed report cards. Admin-configurable. */
+  highlight_fail_grade: boolean;
   updated_at: string;
 }
 
@@ -82,6 +85,8 @@ export interface Subject {
   code: string;
   name: string;
   class_id: string | null;
+  /** NULL means this subject applies to every arm within class_id. */
+  arm_id: string | null;
   teacher_id: string | null;
   status: string;
   created_at: string;
@@ -144,6 +149,12 @@ export interface Result {
   status: ResultStatus;
   created_at: string;
   updated_at: string;
+  /** Present only on Third Term report-card responses: annual total across First/Second/Third Term for this subject. */
+  cumulative_total?: number;
+  /** Present only on Third Term report-card responses: annual average across the terms that have a saved score for this subject. */
+  cumulative_average?: number;
+  /** Present only on Third Term report-card responses: how many of the three terms had a saved score for this subject. */
+  cumulative_terms_count?: number;
 }
 
 export interface AffectiveTrait {

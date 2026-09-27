@@ -1,15 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '@/lib/apiClient';
+import { api, apiReportCard } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Field';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Modal } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
+import { ResultSheet } from '@/components/ResultSheet';
 import { fullName } from '@/lib/format';
-import type { Result, Student, Subject, ClassRow, AcademicSession, Term, Teacher, ResultStatus } from '@/lib/types';
+import type { Result, Student, Subject, ClassRow, AcademicSession, Term, Teacher, ResultStatus, SchoolSettings } from '@/lib/types';
 import { ClipboardList, Search, Pencil, Eye, Send, SendHorizontal, Plus } from 'lucide-react';
 
 export function ResultsPage() {
@@ -23,16 +25,30 @@ export function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ session: '', term: '', classId: '', subjectId: '', studentId: '', status: '', search: '' });
   const [statusTarget, setStatusTarget] = useState<{ id: string; status: ResultStatus } | null>(null);
+  const [settings, setSettings] = useState<SchoolSettings | null>(null);
+  const [preview, setPreview] = useState<{ student: Student; className: string; session: AcademicSession | null; term: Term | null } | null>(null);
+  const [previewResults, setPreviewResults] = useState<(Result & { subjects?: Subject })[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (row: Result & { students?: Student; classes?: ClassRow }) => {
+    if (!row.students) return;
+    setPreview({ student: row.students, className: row.classes?.name ?? '—', session: sessions.find((s) => s.id === row.session_id) ?? null, term: terms.find((t) => t.id === row.term_id) ?? null });
+    setPreviewLoading(true);
+    const data = await apiReportCard<Result & { subjects?: Subject }>(row.student_id, row.session_id, row.term_id);
+    setPreviewResults(data);
+    setPreviewLoading(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [r, s, t, c, sub, st] = await Promise.all([
+    const [r, s, t, c, sub, st, settingsRes] = await Promise.all([
       api.from('results').select('*, students(*), subjects(*), classes(*)').order('updated_at', { ascending: false }),
       api.from('academic_sessions').select('*').order('name'),
       api.from('terms').select('*').order('name'),
       api.from('classes').select('*').order('name'),
       api.from('subjects').select('*').order('name'),
       api.from('students').select('*').order('first_name'),
+      api.from('school_settings').select('*').limit(1).maybeSingle(),
     ]);
     setResults(r.data ?? []);
     setSessions(s.data ?? []);
@@ -40,6 +56,7 @@ export function ResultsPage() {
     setClasses(c.data ?? []);
     setSubjects(sub.data ?? []);
     setStudents(st.data ?? []);
+    setSettings((settingsRes.data as SchoolSettings | null) ?? null);
     setLoading(false);
   }, []);
 
@@ -163,6 +180,7 @@ export function ResultsPage() {
                     <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openPreview(r)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Preview / Print Report Card"><Eye className="h-4 w-4" /></button>
                         <Link to={`/admin/results/entry?session=${r.session_id}&term=${r.term_id}&class=${r.class_id ?? ''}&subject=${r.subject_id}`} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Pencil className="h-4 w-4" /></Link>
                         {r.status !== 'Published' ? (
                           <button onClick={() => setStatusTarget({ id: r.id, status: 'Published' })} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Publish"><Send className="h-4 w-4" /></button>
@@ -178,6 +196,14 @@ export function ResultsPage() {
           </div>
         )}
       </Card>
+
+      <Modal open={!!preview} onClose={() => setPreview(null)} title={preview ? `Report Card — ${fullName(preview.student)}` : ''} size="xl">
+        {previewLoading ? (
+          <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
+        ) : preview ? (
+          <ResultSheet student={preview.student} settings={settings} session={preview.session} term={preview.term} results={previewResults} className={preview.className} />
+        ) : null}
+      </Modal>
 
       <ConfirmDialog
         open={!!statusTarget}

@@ -25,7 +25,7 @@ const tables = new Set([
   'affective_ratings', 'term_remarks',
 ]);
 const columns: Record<string, Set<string>> = {
-  school_settings: new Set(['id','school_name','address','phone','email','logo_url','current_session_id','current_term_id','pass_percentage','motto','ca1_max_score','ca2_max_score','ca3_max_score','exam_max_score','updated_at']),
+  school_settings: new Set(['id','school_name','address','phone','email','logo_url','current_session_id','current_term_id','pass_percentage','motto','ca1_max_score','ca2_max_score','ca3_max_score','exam_max_score','highlight_fail_grade','updated_at']),
   app_users: new Set(['id','email','password_hash','role','display_name','teacher_id','student_id','parent_id','created_at']),
   academic_sessions: new Set(['id','name','is_active','created_at']),
   terms: new Set(['id','name','session_id','is_current','created_at']),
@@ -33,7 +33,7 @@ const columns: Record<string, Set<string>> = {
   classes: new Set(['id','name','class_teacher_id','created_at']),
   arms: new Set(['id','name','created_at']),
   class_arms: new Set(['class_id','arm_id','created_at']),
-  subjects: new Set(['id','code','name','class_id','teacher_id','status','created_at']),
+  subjects: new Set(['id','code','name','class_id','arm_id','teacher_id','status','created_at']),
   students: new Set(['id','student_id','first_name','last_name','other_name','gender','date_of_birth','class_id','arm_id','photo_url','parent_guardian','parent_phone','email','admission_date','status','created_at']),
   parents: new Set(['id','full_name','email','phone','student_id','created_at']),
   results: new Set(['id','student_id','subject_id','teacher_id','class_id','session_id','term_id','ca1_score','ca2_score','ca3_score','exam_score','total_score','is_offered','grade','remark','status','created_at','updated_at']),
@@ -69,11 +69,15 @@ function requireRole(...roles: Role[]) {
   };
 }
 
-function parseSelect(table: string, raw: string | undefined) {
+function parseSelect(table: string, raw: string | undefined): string {
   const allowed = columns[table];
-  if (!raw || raw === '*') return '*';
-  const selected = raw.split(',').map((part) => part.trim().split('(')[0]).filter((name) => allowed.has(name));
-  return selected.length ? selected.join(', ') : '*';
+  if (!raw || raw === '*') {
+    // Never let a bare '*' leak password_hash to the client, even though it's a bcrypt hash.
+    if (table === 'app_users') return [...allowed].filter((name) => name !== 'password_hash').map((name) => `"${name}"`).join(', ');
+    return '*';
+  }
+  const selected = raw.split(',').map((part) => part.trim().split('(')[0]).filter((name) => allowed.has(name) && !(table === 'app_users' && name === 'password_hash'));
+  return selected.length ? selected.join(', ') : parseSelect(table, '*');
 }
 
 function addFilter(table: string, rawKey: string, rawValue: string, params: unknown[], where: string[]) {
@@ -101,6 +105,7 @@ function applyScope(table: string, user: AuthUser, where: string[], params: unkn
   if (user.role === 'teacher') {
     if (table === 'results') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (table === 'teachers') { where.push(`id = $${params.length + 1}`); params.push(user.teacher_id); }
+    if (table === 'subjects') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (['affective_ratings', 'term_remarks'].includes(table)) { where.push(`student_id IN (SELECT id FROM students WHERE class_id = ANY($${params.length + 1}::uuid[]))`); params.push(user.class_ids ?? []); }
     if (table === 'app_users') { where.push('1 = 0'); }
   }
@@ -120,10 +125,18 @@ function applyScope(table: string, user: AuthUser, where: string[], params: unkn
   }
 }
 
-function canWrite(user: AuthUser, table: string) {
+function canWrite(user: AuthUser, table: string, method: string) {
+  // app_users must always go through the dedicated /users endpoints below, which hash
+  // passwords server-side. The only generic operation allowed here is admin deleting a user.
+  if (table === 'app_users') return user.role === 'admin' && method === 'DELETE';
   if (user.role === 'admin') return true;
-  if (user.role === 'teacher') return ['results','affective_ratings','term_remarks'].includes(table);
+  if (user.role === 'teacher') return ['results','affective_ratings','term_remarks','subjects'].includes(table);
   return false;
+}
+
+function sanitizeUser<T extends Record<string, unknown>>(row: T): Omit<T, 'password_hash'> {
+  const { password_hash: _omit, ...rest } = row;
+  return rest;
 }
 
 export const apiRouter = Router();
@@ -179,6 +192,56 @@ apiRouter.get('/report-card/:studentId/:sessionId/:termId', requireAuth, async (
   }
 });
 
+// Dedicated, admin-only user-account endpoints. These exist because password hashing must
+// happen server-side — the generic /data/:table passthrough below deliberately refuses to
+// touch app_users for POST/PUT so a hash can never be bypassed.
+apiRouter.post('/users', requireAuth, requireRole('admin'), async (req: AuthedRequest, res) => {
+  const email = String(req.body?.email ?? '').trim().toLowerCase();
+  const password = String(req.body?.password ?? '');
+  const displayName = String(req.body?.display_name ?? '').trim();
+  const role = req.body?.role as Role;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(res, 'A valid email is required.');
+  if (!password || password.length < 6) return jsonError(res, 'Password must be at least 6 characters.');
+  if (!displayName) return jsonError(res, 'Display name is required.');
+  if (!['admin', 'teacher', 'student', 'parent'].includes(role)) return jsonError(res, 'A valid role is required.');
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const result = await query(
+      `INSERT INTO app_users (email, password_hash, role, display_name, teacher_id, student_id, parent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [email, passwordHash, role, displayName, req.body?.teacher_id || null, req.body?.student_id || null, req.body?.parent_id || null],
+    );
+    return res.status(201).json({ data: sanitizeUser(result.rows[0]) });
+  } catch (error) {
+    if ((error as { code?: string }).code === '23505') return jsonError(res, 'A user with this email already exists.', 409);
+    console.error(error);
+    return jsonError(res, 'Failed to create user.', 500);
+  }
+});
+
+apiRouter.put('/users/:id', requireAuth, requireRole('admin'), async (req: AuthedRequest, res) => {
+  const updates: string[] = [];
+  const params: unknown[] = [];
+  if (typeof req.body?.display_name === 'string' && req.body.display_name.trim()) { updates.push(`display_name = $${params.length + 1}`); params.push(req.body.display_name.trim()); }
+  if (typeof req.body?.email === 'string' && req.body.email.trim()) { updates.push(`email = $${params.length + 1}`); params.push(req.body.email.trim().toLowerCase()); }
+  if (typeof req.body?.password === 'string' && req.body.password) {
+    if (req.body.password.length < 6) return jsonError(res, 'Password must be at least 6 characters.');
+    updates.push(`password_hash = $${params.length + 1}`);
+    params.push(await bcrypt.hash(req.body.password, 12));
+  }
+  if (!updates.length) return jsonError(res, 'Nothing to update.');
+  params.push(req.params.id);
+  try {
+    const result = await query(`UPDATE app_users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
+    if (!result.rows[0]) return jsonError(res, 'User not found.', 404);
+    return res.json({ data: sanitizeUser(result.rows[0]) });
+  } catch (error) {
+    if ((error as { code?: string }).code === '23505') return jsonError(res, 'A user with this email already exists.', 409);
+    console.error(error);
+    return jsonError(res, 'Failed to update user.', 500);
+  }
+});
+
 apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
   const table = Array.isArray(req.params.table) ? req.params.table[0] : req.params.table;
   if (!tables.has(table)) return jsonError(res, 'Unknown resource.', 404);
@@ -206,8 +269,10 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
       return res.json({ data: result.rows });
     }
 
-    if (!canWrite(user, table)) return jsonError(res, 'You are not authorized to modify this resource.', 403);
+    if (!canWrite(user, table, req.method)) return jsonError(res, 'You are not authorized to modify this resource.', 403);
     const bodyRows = (Array.isArray(req.body) ? req.body : [req.body]) as Record<string, unknown>[];
+    // A teacher can only ever assign/edit their OWN subject-to-class-and-arm links, regardless of what's in the request body.
+    if (user.role === 'teacher' && table === 'subjects') for (const row of bodyRows) row.teacher_id = user.teacher_id;
     const body = bodyRows[0] ?? {};
     const validEntries = Object.entries(body).filter(([key]) => columns[table].has(key) && key !== 'id' && key !== 'total_score' && key !== 'created_at');
     if (req.method === 'POST') {
