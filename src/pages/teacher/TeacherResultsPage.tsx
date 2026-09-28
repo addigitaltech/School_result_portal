@@ -92,7 +92,7 @@ export function TeacherResultsPage() {
                     <td className="px-5 py-3 text-right">
                       <div className="inline-flex items-center gap-1">
                         <button onClick={() => openPreview(r)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Preview / Print Report Card"><Eye className="h-4 w-4" /></button>
-                        <Link to={`/teacher/results/entry?session=${r.session_id}&term=${r.term_id}&class=${r.class_id ?? ''}&subject=${r.subject_id}`} className="inline-flex p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
+                        <Link to={`/teacher/results/entry?session=${r.session_id}&term=${r.term_id}&class=${r.class_id ?? ''}&arm=${r.students?.arm_id ?? ''}&subject=${r.subject_id}`} className="inline-flex p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg">
                           <Pencil className="h-4 w-4" />
                         </Link>
                       </div>

@@ -181,7 +181,7 @@ export function ResultsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => openPreview(r)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Preview / Print Report Card"><Eye className="h-4 w-4" /></button>
-                        <Link to={`/admin/results/entry?session=${r.session_id}&term=${r.term_id}&class=${r.class_id ?? ''}&subject=${r.subject_id}`} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Pencil className="h-4 w-4" /></Link>
+                        <Link to={`/admin/results/entry?session=${r.session_id}&term=${r.term_id}&class=${r.class_id ?? ''}&arm=${r.students?.arm_id ?? ''}&subject=${r.subject_id}`} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Pencil className="h-4 w-4" /></Link>
                         {r.status !== 'Published' ? (
                           <button onClick={() => setStatusTarget({ id: r.id, status: 'Published' })} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Publish"><Send className="h-4 w-4" /></button>
                         ) : (

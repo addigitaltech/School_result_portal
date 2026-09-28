@@ -32,9 +32,9 @@ export function TeacherSubjectsPage() {
   const load = useCallback(async () => {
     if (!user?.teacher_id) { setLoading(false); return; }
     setLoading(true);
-    // GET /data/subjects is automatically scoped server-side to this teacher's own rows.
+    // Reads are school-wide reference data; we filter to this teacher's own rows here. Writes are enforced server-side.
     const [s, c, a] = await Promise.all([
-      api.from('subjects').select('*').order('created_at', { ascending: false }),
+      api.from('subjects').select('*').eq('teacher_id', user.teacher_id).order('created_at', { ascending: false }),
       api.from('classes').select('*').order('name'),
       api.from('arms').select('*').order('name'),
     ]);

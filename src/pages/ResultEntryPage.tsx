@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Field';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
 import { fullName } from '@/lib/format';
 import { computeGrade, clampScore } from '@/lib/grading';
-import type { AcademicSession, Term, ClassRow, Subject, Student, Result, SchoolSettings, GradeBand, AffectiveTrait, AffectiveRating, TermRemark } from '@/lib/types';
+import type { AcademicSession, Term, ClassRow, Arm, ClassArm, Subject, Student, Result, SchoolSettings, GradeBand, AffectiveTrait, AffectiveRating, TermRemark } from '@/lib/types';
 import { ArrowLeft, Save, Send, ClipboardList, SlidersHorizontal } from 'lucide-react';
 
 interface RowState {
@@ -43,6 +43,8 @@ export function ResultEntryPage() {
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [arms, setArms] = useState<Arm[]>([]);
+  const [classArms, setClassArms] = useState<ClassArm[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [settings, setSettings] = useState(defaultSettings);
@@ -54,6 +56,7 @@ export function ResultEntryPage() {
   const [session, setSession] = useState('');
   const [term, setTerm] = useState('');
   const [classId, setClassId] = useState('');
+  const [armId, setArmId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [saving, setSaving] = useState(false);
@@ -62,10 +65,12 @@ export function ResultEntryPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [s, t, c, sub, school, bands, traitRows] = await Promise.all([
+    const [s, t, c, arm, ca, sub, school, bands, traitRows] = await Promise.all([
       api.from('academic_sessions').select('*').order('name'),
       api.from('terms').select('*').order('name'),
       api.from('classes').select('*').order('name'),
+      api.from('arms').select('*').order('name'),
+      api.from('class_arms').select('*'),
       api.from('subjects').select('*').order('name'),
       api.from('school_settings').select('ca1_max_score, ca2_max_score, ca3_max_score, exam_max_score').limit(1).maybeSingle(),
       api.from('grade_bands').select('*').order('min_score', { ascending: false }),
@@ -74,6 +79,8 @@ export function ResultEntryPage() {
     setSessions(s.data ?? []);
     setTerms(t.data ?? []);
     setClasses(c.data ?? []);
+    setArms(arm.data ?? []);
+    setClassArms(ca.data ?? []);
     setSubjects(sub.data ?? []);
     setSettings({ ...defaultSettings, ...(school.data ?? {}) });
     setGradeBands((bands.data ?? []) as GradeBand[]);
@@ -93,10 +100,12 @@ export function ResultEntryPage() {
       const qs = params.get('session');
       const qt = params.get('term');
       const qc = params.get('class');
+      const qarm = params.get('arm');
       const qsub = params.get('subject');
       if (qs) setSession(qs);
       if (qt) setTerm(qt);
       if (qc) setClassId(qc);
+      if (qarm) setArmId(qarm);
       if (qsub) setSubjectId(qsub);
     }
   }, [loading, sessions, params]);
@@ -107,17 +116,30 @@ export function ResultEntryPage() {
     if (teacher) return classes.filter((c) => (teacher.class_ids ?? []).includes(c.id));
     return [];
   }, [isAdmin, teacher, classes]);
+  const availableArms = useMemo(
+    () => classArms.filter((ca) => ca.class_id === classId).map((ca) => arms.find((a) => a.id === ca.arm_id)).filter((a): a is Arm => !!a),
+    [classArms, arms, classId],
+  );
   const availableSubjects = useMemo(() => {
     let list = subjects;
     if (classId) list = list.filter((s) => s.class_id === classId);
+    // A subject with no arm_id applies to every arm in its class; one with an arm_id only applies to that arm.
+    if (armId) list = list.filter((s) => !s.arm_id || s.arm_id === armId);
     if (!isAdmin && teacher) list = list.filter((s) => (teacher.subject_ids ?? []).includes(s.id));
     return list;
-  }, [subjects, classId, isAdmin, teacher]);
+  }, [subjects, classId, armId, isAdmin, teacher]);
+
+  // Reset arm and subject whenever the class changes, since both are scoped to the selected class.
+  const handleClassChange = (value: string) => { setClassId(value); setArmId(''); setSubjectId(''); };
+
+  const armRequired = availableArms.length > 0;
 
   useEffect(() => {
-    if (!classId) { setStudents([]); setRows({}); return; }
+    if (!classId || (armRequired && !armId)) { setStudents([]); setRows({}); return; }
     (async () => {
-      const { data: studs } = await api.from('students').select('*').eq('class_id', classId).order('first_name');
+      let query = api.from('students').select('*').eq('class_id', classId);
+      if (armId) query = query.eq('arm_id', armId);
+      const { data: studs } = await query.order('first_name');
       const loadedStudents = (studs ?? []) as Student[];
       setStudents(loadedStudents);
       const map: Record<string, RowState> = {};
@@ -152,7 +174,7 @@ export function ResultEntryPage() {
       }
       setRows(map);
     })();
-  }, [classId, session, term, subjectId]);
+  }, [classId, armId, armRequired, session, term, subjectId]);
 
   const setRow = (studentId: string, patch: Partial<RowState>) => {
     setRows((prev) => ({ ...prev, [studentId]: { ...(prev[studentId] ?? makeDefaultRow()), ...patch } }));
@@ -163,13 +185,13 @@ export function ResultEntryPage() {
     setRow(studentId, { ratings: { ...row.ratings, [traitId]: rating } });
   };
 
-  const canEnter = session && term && classId && subjectId;
+  const canEnter = session && term && classId && (!armRequired || armId) && subjectId;
   const maxTotal = settings.ca1_max_score + settings.ca2_max_score + settings.ca3_max_score + settings.exam_max_score;
   const offeredStudents = students.filter((student) => rows[student.id]?.offered !== false);
 
   const saveAll = async (publish: boolean) => {
-    if (!canEnter) { error('Please select session, term, class and subject.'); return; }
-    if (students.length === 0) { error('No students in the selected class.'); return; }
+    if (!canEnter) { error('Please select session, term, class, arm and subject.'); return; }
+    if (students.length === 0) { error('No students in the selected class and arm.'); return; }
     setSaving(true);
     let saved = 0;
     for (const student of students) {
@@ -231,12 +253,12 @@ export function ResultEntryPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-3"><Link to={isAdmin ? '/admin/results' : '/teacher/results'} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"><ArrowLeft className="h-5 w-5" /></Link><div><h2 className="text-2xl font-bold text-slate-800">Result Entry</h2><p className="text-sm text-slate-500 mt-1">Enter CA1, CA2, CA3 and Exam scores. Maximums are configured in school settings.</p></div></div>
 
-      <Card><CardBody><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Academic Session</span><Select value={session} onChange={(e) => { setSession(e.target.value); setTerm(''); }}><option value="">Select session</option>{sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Term</span><Select value={term} onChange={(e) => setTerm(e.target.value)} disabled={!session}><option value="">Select term</option>{availableTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Class</span><Select value={classId} onChange={(e) => setClassId(e.target.value)}><option value="">Select class</option>{availableClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Subject</span><Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!classId}><option value="">Select subject</option>{availableSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label></div></CardBody></Card>
+      <Card><CardBody><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Academic Session</span><Select value={session} onChange={(e) => { setSession(e.target.value); setTerm(''); }}><option value="">Select session</option>{sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Term</span><Select value={term} onChange={(e) => setTerm(e.target.value)} disabled={!session}><option value="">Select term</option>{availableTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Class</span><Select value={classId} onChange={(e) => handleClassChange(e.target.value)}><option value="">Select class</option>{availableClasses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Arm</span><Select value={armId} onChange={(e) => { setArmId(e.target.value); setSubjectId(''); }} disabled={!classId || !armRequired}><option value="">{!classId ? 'Select class first' : armRequired ? 'Select arm' : 'No arms for this class'}</option>{availableArms.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select></label><label className="block"><span className="block text-sm font-medium text-slate-700 mb-1">Subject</span><Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!classId || (armRequired && !armId)}><option value="">Select subject</option>{availableSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></label></div></CardBody></Card>
 
       {canEnter && <Card><CardHeader title="Student Scores" subtitle={`${students.length} students · ${offeredStudents.length} offered · ${maxTotal} total points`} action={<div className="flex gap-2"><Button size="sm" variant="secondary" icon={<Save className="h-4 w-4" />} onClick={() => saveAll(false)} disabled={saving || students.length === 0}>{saving ? 'Saving...' : 'Save as Pending'}</Button><Button size="sm" variant="success" icon={<Send className="h-4 w-4" />} onClick={() => saveAll(true)} disabled={saving || students.length === 0}>Save & Publish</Button></div>} /></Card>}
-      {canEnter && (students.length === 0 ? <Card><EmptyState icon={<ClipboardList className="h-12 w-12" />} title="No students in this class" description="Add students to this class first." /></Card> : <Card><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr><th className="text-left px-4 py-3 font-medium">Student</th><th className="text-left px-4 py-3 font-medium">Offered</th><th className="text-left px-4 py-3 font-medium">CA1 (/{settings.ca1_max_score})</th><th className="text-left px-4 py-3 font-medium">CA2 (/{settings.ca2_max_score})</th><th className="text-left px-4 py-3 font-medium">CA3 (/{settings.ca3_max_score})</th><th className="text-left px-4 py-3 font-medium">Exam (/{settings.exam_max_score})</th><th className="text-left px-4 py-3 font-medium">Total</th><th className="text-left px-4 py-3 font-medium">Grade</th><th className="text-left px-4 py-3 font-medium">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{students.map((student) => { const row = rows[student.id] ?? makeDefaultRow(); const ca1 = row.ca1 === '' ? 0 : Number(row.ca1) || 0; const ca2 = row.ca2 === '' ? 0 : Number(row.ca2) || 0; const ca3 = row.ca3 === '' ? 0 : Number(row.ca3) || 0; const exam = row.exam === '' ? 0 : Number(row.exam) || 0; const total = ca1 + ca2 + ca3 + exam; const graded = row.offered ? computeGrade(total, gradeBands) : { grade: 'N/A', remark: 'Not offered' }; return <tr key={student.id} className={`align-top hover:bg-slate-50 ${!row.offered ? 'bg-slate-50/70' : ''}`}><td className="px-4 py-3 font-medium text-slate-800">{fullName(student)}<span className="block font-mono text-xs text-slate-400">{student.student_id}</span></td><td className="px-4 py-3"><label className="inline-flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={row.offered} onChange={(e) => setRow(student.id, { offered: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Yes</label></td>{([['ca1', settings.ca1_max_score], ['ca2', settings.ca2_max_score], ['ca3', settings.ca3_max_score], ['exam', settings.exam_max_score]] as const).map(([field, max]) => { const value = row[field]; const invalid = value !== '' && (Number(value) < 0 || Number(value) > max); return <td key={field} className="px-4 py-3"><input type="number" min={0} max={max} value={value} onChange={(e) => setRow(student.id, { [field]: e.target.value })} disabled={!row.offered || max === 0} className={`w-20 rounded-lg border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${invalid ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'} disabled:bg-slate-100 disabled:text-slate-400`} placeholder="0" />{invalid && <p className="text-xs text-red-600 mt-0.5">Max {max}</p>}</td>; })}<td className="px-4 py-3 font-semibold text-slate-800">{row.offered ? total : '—'}</td><td className="px-4 py-3"><span className="font-semibold text-blue-700">{graded.grade}</span><span className="block text-xs text-slate-500">{graded.remark}</span></td><td className="px-4 py-3"><details className="min-w-[260px]"><summary className="flex cursor-pointer items-center gap-1 text-xs font-medium text-blue-700"><SlidersHorizontal className="h-3.5 w-3.5" /> Affective / remarks</summary><div className="mt-3 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-3"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Affective / Psychomotor Ratings</p>{traits.length === 0 ? <p className="text-xs text-slate-400">No traits configured.</p> : <div className="space-y-2">{traits.map((trait) => <div key={trait.id} className="flex flex-wrap items-center gap-2"><span className="w-36 text-xs text-slate-700">{trait.name}</span>{([1, 2, 3, 4, 5] as const).map((rating) => <label key={rating} className="flex items-center gap-1 text-[11px] text-slate-500"><input type="radio" name={`${student.id}-${trait.id}`} checked={row.ratings[trait.id] === rating} onChange={() => setRating(student.id, trait.id, rating)} />{ratingLabels[rating]}</label>)}</div>)}</div>}</div><label className="block"><span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Teacher's Remark</span><textarea value={row.teacherRemark} onChange={(e) => setRow(student.id, { teacherRemark: e.target.value })} rows={2} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter teacher's remark for this term" /></label><label className="block"><span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Principal's Remark</span><textarea value={row.principalRemark} onChange={(e) => setRow(student.id, { principalRemark: e.target.value })} rows={2} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter principal's remark for this term" /></label></div></details></td></tr>; })}</tbody></table></div></Card>)}
+      {canEnter && (students.length === 0 ? <Card><EmptyState icon={<ClipboardList className="h-12 w-12" />} title="No students in this class and arm" description="Add students to this class and arm first." /></Card> : <Card><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr><th className="text-left px-4 py-3 font-medium">Student</th><th className="text-left px-4 py-3 font-medium">Offered</th><th className="text-left px-4 py-3 font-medium">CA1 (/{settings.ca1_max_score})</th><th className="text-left px-4 py-3 font-medium">CA2 (/{settings.ca2_max_score})</th><th className="text-left px-4 py-3 font-medium">CA3 (/{settings.ca3_max_score})</th><th className="text-left px-4 py-3 font-medium">Exam (/{settings.exam_max_score})</th><th className="text-left px-4 py-3 font-medium">Total</th><th className="text-left px-4 py-3 font-medium">Grade</th><th className="text-left px-4 py-3 font-medium">Details</th></tr></thead><tbody className="divide-y divide-slate-100">{students.map((student) => { const row = rows[student.id] ?? makeDefaultRow(); const ca1 = row.ca1 === '' ? 0 : Number(row.ca1) || 0; const ca2 = row.ca2 === '' ? 0 : Number(row.ca2) || 0; const ca3 = row.ca3 === '' ? 0 : Number(row.ca3) || 0; const exam = row.exam === '' ? 0 : Number(row.exam) || 0; const total = ca1 + ca2 + ca3 + exam; const graded = row.offered ? computeGrade(total, gradeBands) : { grade: 'N/A', remark: 'Not offered' }; return <tr key={student.id} className={`align-top hover:bg-slate-50 ${!row.offered ? 'bg-slate-50/70' : ''}`}><td className="px-4 py-3 font-medium text-slate-800">{fullName(student)}<span className="block font-mono text-xs text-slate-400">{student.student_id}</span></td><td className="px-4 py-3"><label className="inline-flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={row.offered} onChange={(e) => setRow(student.id, { offered: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Yes</label></td>{([['ca1', settings.ca1_max_score], ['ca2', settings.ca2_max_score], ['ca3', settings.ca3_max_score], ['exam', settings.exam_max_score]] as const).map(([field, max]) => { const value = row[field]; const invalid = value !== '' && (Number(value) < 0 || Number(value) > max); return <td key={field} className="px-4 py-3"><input type="number" min={0} max={max} value={value} onChange={(e) => setRow(student.id, { [field]: e.target.value })} disabled={!row.offered || max === 0} className={`w-20 rounded-lg border px-2 py-1.5 text-sm focus:outline-none focus:ring-2 ${invalid ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'} disabled:bg-slate-100 disabled:text-slate-400`} placeholder="0" />{invalid && <p className="text-xs text-red-600 mt-0.5">Max {max}</p>}</td>; })}<td className="px-4 py-3 font-semibold text-slate-800">{row.offered ? total : '—'}</td><td className="px-4 py-3"><span className="font-semibold text-blue-700">{graded.grade}</span><span className="block text-xs text-slate-500">{graded.remark}</span></td><td className="px-4 py-3"><details className="min-w-[260px]"><summary className="flex cursor-pointer items-center gap-1 text-xs font-medium text-blue-700"><SlidersHorizontal className="h-3.5 w-3.5" /> Affective / remarks</summary><div className="mt-3 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-3"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Affective / Psychomotor Ratings</p>{traits.length === 0 ? <p className="text-xs text-slate-400">No traits configured.</p> : <div className="space-y-2">{traits.map((trait) => <div key={trait.id} className="flex flex-wrap items-center gap-2"><span className="w-36 text-xs text-slate-700">{trait.name}</span>{([1, 2, 3, 4, 5] as const).map((rating) => <label key={rating} className="flex items-center gap-1 text-[11px] text-slate-500"><input type="radio" name={`${student.id}-${trait.id}`} checked={row.ratings[trait.id] === rating} onChange={() => setRating(student.id, trait.id, rating)} />{ratingLabels[rating]}</label>)}</div>)}</div>}</div><label className="block"><span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Teacher's Remark</span><textarea value={row.teacherRemark} onChange={(e) => setRow(student.id, { teacherRemark: e.target.value })} rows={2} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter teacher's remark for this term" /></label><label className="block"><span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Principal's Remark</span><textarea value={row.principalRemark} onChange={(e) => setRow(student.id, { principalRemark: e.target.value })} rows={2} className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter principal's remark for this term" /></label></div></details></td></tr>; })}</tbody></table></div></Card>)}
 
-      {!canEnter && <Card><EmptyState icon={<ClipboardList className="h-12 w-12" />} title="Select all filters to begin" description="Choose a session, term, class and subject to enter scores for students." /></Card>}
+      {!canEnter && <Card><EmptyState icon={<ClipboardList className="h-12 w-12" />} title="Select all filters to begin" description="Choose a session, term, class, arm and subject to enter scores for students." /></Card>}
     </div>
   );
 }
