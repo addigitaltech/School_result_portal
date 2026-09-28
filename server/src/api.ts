@@ -100,12 +100,13 @@ function addFilter(table: string, rawKey: string, rawValue: string, params: unkn
   }
 }
 
-function applyScope(table: string, user: AuthUser, where: string[], params: unknown[]) {
+function applyScope(table: string, user: AuthUser, where: string[], params: unknown[], method = 'GET') {
   if (user.role === 'admin') return;
   if (user.role === 'teacher') {
     if (table === 'results') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (table === 'teachers') { where.push(`id = $${params.length + 1}`); params.push(user.teacher_id); }
-    if (table === 'subjects') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
+    // Subjects are readable by teachers (reference data), but a teacher can only update/delete their own.
+    if (table === 'subjects' && method !== 'GET') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (['affective_ratings', 'term_remarks'].includes(table)) { where.push(`student_id IN (SELECT id FROM students WHERE class_id = ANY($${params.length + 1}::uuid[]))`); params.push(user.class_ids ?? []); }
     if (table === 'app_users') { where.push('1 = 0'); }
   }
@@ -248,7 +249,7 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
   const user = req.user!;
   const where: string[] = [];
   const params: unknown[] = [];
-  applyScope(table, user, where, params);
+  applyScope(table, user, where, params, req.method);
 
   try {
     if (req.method === 'GET') {
