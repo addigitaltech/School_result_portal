@@ -30,6 +30,8 @@ export interface SchoolSettings {
   exam_max_score: number;
   /** When true (the default), an F grade is shown in red on printed report cards. Admin-configurable. */
   highlight_fail_grade: boolean;
+  /** How students/parents check results: 'portal' (login), 'token' (surname + token, no account), or 'both'. */
+  result_access_mode: 'portal' | 'token' | 'both';
   updated_at: string;
 }
 

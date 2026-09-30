@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api, apiReportCard } from '@/lib/apiClient';
+import { api, apiReportBundle, type ReportBundle } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +11,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
 import { ResultSheet } from '@/components/ResultSheet';
 import { fullName } from '@/lib/format';
-import type { Result, Student, Subject, ClassRow, AcademicSession, Term, Teacher, ResultStatus, SchoolSettings } from '@/lib/types';
+import type { Result, Student, Subject, ClassRow, Arm, AcademicSession, Term, Teacher, ResultStatus } from '@/lib/types';
 import { ClipboardList, Search, Pencil, Eye, Send, SendHorizontal, Plus } from 'lucide-react';
 
 export function ResultsPage() {
@@ -22,33 +22,30 @@ export function ResultsPage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [arms, setArms] = useState<Arm[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ session: '', term: '', classId: '', subjectId: '', studentId: '', status: '', search: '' });
+  const [filters, setFilters] = useState({ session: '', term: '', classId: '', armId: '', subjectId: '', studentId: '', status: '', search: '' });
   const [statusTarget, setStatusTarget] = useState<{ id: string; status: ResultStatus } | null>(null);
-  const [settings, setSettings] = useState<SchoolSettings | null>(null);
-  const [preview, setPreview] = useState<{ student: Student; className: string; session: AcademicSession | null; term: Term | null } | null>(null);
-  const [previewResults, setPreviewResults] = useState<(Result & { subjects?: Subject })[]>([]);
+  const [bundle, setBundle] = useState<ReportBundle | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const openPreview = async (row: Result & { students?: Student; classes?: ClassRow }) => {
-    if (!row.students) return;
-    setPreview({ student: row.students, className: row.classes?.name ?? '—', session: sessions.find((s) => s.id === row.session_id) ?? null, term: terms.find((t) => t.id === row.term_id) ?? null });
+  const openPreview = async (row: Result & { student_id: string; session_id: string; term_id: string }) => {
+    setBundle(null);
     setPreviewLoading(true);
-    const data = await apiReportCard<Result & { subjects?: Subject }>(row.student_id, row.session_id, row.term_id);
-    setPreviewResults(data);
-    setPreviewLoading(false);
+    try { setBundle(await apiReportBundle(row.student_id, row.session_id, row.term_id)); }
+    finally { setPreviewLoading(false); }
   };
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [r, s, t, c, sub, st, settingsRes] = await Promise.all([
+    const [r, s, t, c, sub, st, arm] = await Promise.all([
       api.from('results').select('*, students(*), subjects(*), classes(*)').order('updated_at', { ascending: false }),
       api.from('academic_sessions').select('*').order('name'),
       api.from('terms').select('*').order('name'),
       api.from('classes').select('*').order('name'),
       api.from('subjects').select('*').order('name'),
       api.from('students').select('*').order('first_name'),
-      api.from('school_settings').select('*').limit(1).maybeSingle(),
+      api.from('arms').select('*').order('name'),
     ]);
     setResults(r.data ?? []);
     setSessions(s.data ?? []);
@@ -56,7 +53,7 @@ export function ResultsPage() {
     setClasses(c.data ?? []);
     setSubjects(sub.data ?? []);
     setStudents(st.data ?? []);
-    setSettings((settingsRes.data as SchoolSettings | null) ?? null);
+    setArms(arm.data ?? []);
     setLoading(false);
   }, []);
 
@@ -68,6 +65,7 @@ export function ResultsPage() {
     if (filters.session && r.session_id !== filters.session) return false;
     if (filters.term && r.term_id !== filters.term) return false;
     if (filters.classId && r.class_id !== filters.classId) return false;
+    if (filters.armId && r.students?.arm_id !== filters.armId) return false;
     if (filters.subjectId && r.subject_id !== filters.subjectId) return false;
     if (filters.studentId && r.student_id !== filters.studentId) return false;
     if (filters.status && r.status !== filters.status) return false;
@@ -121,9 +119,13 @@ export function ResultsPage() {
               <option value="">All Terms</option>
               {availableTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </Select>
-            <Select value={filters.classId} onChange={(e) => setFilters({ ...filters, classId: e.target.value })}>
+            <Select value={filters.classId} onChange={(e) => setFilters({ ...filters, classId: e.target.value, armId: '' })}>
               <option value="">All Classes</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+            <Select value={filters.armId} onChange={(e) => setFilters({ ...filters, armId: e.target.value })}>
+              <option value="">All Arms</option>
+              {arms.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
             <Select value={filters.subjectId} onChange={(e) => setFilters({ ...filters, subjectId: e.target.value })}>
               <option value="">All Subjects</option>
@@ -197,12 +199,12 @@ export function ResultsPage() {
         )}
       </Card>
 
-      <Modal open={!!preview} onClose={() => setPreview(null)} title={preview ? `Report Card — ${fullName(preview.student)}` : ''} size="xl">
-        {previewLoading ? (
+      <Modal open={previewLoading || !!bundle} onClose={() => setBundle(null)} title={bundle ? `Report Card — ${fullName(bundle.student)}` : 'Loading...'} size="xl">
+        {previewLoading || !bundle ? (
           <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
-        ) : preview ? (
-          <ResultSheet student={preview.student} settings={settings} session={preview.session} term={preview.term} results={previewResults} className={preview.className} />
-        ) : null}
+        ) : (
+          <ResultSheet student={bundle.student} settings={bundle.settings} session={bundle.session} term={bundle.term} results={bundle.results} className={bundle.className} bundle={bundle} />
+        )}
       </Modal>
 
       <ConfirmDialog

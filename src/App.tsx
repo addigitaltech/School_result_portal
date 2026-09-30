@@ -6,6 +6,9 @@ import { ToastProvider } from '@/context/ToastContext';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { FullPageLoader } from '@/components/ui/Feedback';
 import { LoginPage } from '@/pages/LoginPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
+import { CheckResultPage } from '@/pages/CheckResultPage';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { StudentsPage } from '@/pages/admin/StudentsPage';
 import { ParentsPage } from '@/pages/admin/ParentsPage';
@@ -52,6 +55,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/check-result" element={<CheckResultPage />} />
       <Route path="/" element={<RoleHome />} />
 
       {/* Admin */}

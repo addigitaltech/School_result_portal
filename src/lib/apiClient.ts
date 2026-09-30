@@ -56,7 +56,10 @@ class QueryBuilder<T = any> implements PromiseLike<Result<any>> {
         method: this.method,
         ...(this.method === 'GET' || this.method === 'DELETE' ? {} : { body: JSON.stringify(this.body ?? {}) }),
       });
-      const baseData = this.singleMode ? (payload.data ? [payload.data as T] : []) : ((payload.data ?? []) as T[]);
+      // The API always answers with an array of rows; single()/maybeSingle() must unwrap the first row,
+      // otherwise callers receive an array where they expect an object (e.g. settings.id === undefined).
+      const rows = Array.isArray(payload.data) ? (payload.data as T[]) : payload.data ? [payload.data as T] : [];
+      const baseData = this.singleMode ? rows.slice(0, 1) : rows;
       const hydrated = await hydrateRelations(this.table, baseData, this.params.get('select'));
       const data = this.singleMode ? (hydrated[0] ?? null) : hydrated;
       return { data, error: null, count: payload.count };
@@ -95,7 +98,7 @@ export const api = {
           try { const response = await request<{ data: { publicUrl: string } }>(`/uploads`, { method: 'POST', body: form }); uploadedUrls.set(`${bucket}/${path}`, response.data.publicUrl); return { error: null }; }
           catch (error) { return { error: error as Error }; }
         },
-        getPublicUrl(path: string) { return { data: { publicUrl: uploadedUrls.get(`${bucket}/${path}`) ?? `${API_URL}/uploads/${path}` } }; },
+        getPublicUrl(path: string) { return { data: { publicUrl: uploadedUrls.get(`${bucket}/${path}`) ?? `${API_URL}/files/${path}` } }; },
       };
     },
   },
@@ -112,6 +115,71 @@ export async function apiLogin(email: string, password: string): Promise<LoginRe
 export async function apiReportCard<T = any>(studentId: string, sessionId: string, termId: string): Promise<T[]> {
   const response = await request<{ data: T[] }>(`/report-card/${encodeURIComponent(studentId)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(termId)}`);
   return response.data ?? [];
+}
+
+export interface ReportBundle {
+  student: import('./types').Student;
+  className: string;
+  armName: string;
+  settings: import('./types').SchoolSettings | null;
+  session: import('./types').AcademicSession | null;
+  term: import('./types').Term | null;
+  results: any[];
+  termRemark: import('./types').TermRemark | null;
+  gradeBands: import('./types').GradeBand[];
+  traits: import('./types').AffectiveTrait[];
+  ratings: import('./types').AffectiveRating[];
+  allResults: any[];
+  classStudents: Pick<import('./types').Student, 'id' | 'class_id' | 'arm_id'>[];
+}
+
+/** Complete report card (with correct class statistics) for any student. Staff only. */
+export async function apiReportBundle(studentId: string, sessionId: string, termId: string): Promise<ReportBundle> {
+  const response = await request<{ data: ReportBundle }>(`/report-bundle/${encodeURIComponent(studentId)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(termId)}`);
+  return response.data;
+}
+
+export interface CheckerPeriod { session_id: string; session_name: string; term_id: string; term_name: string }
+export interface CheckerInfo {
+  student: { id: string; first_name: string; last_name: string; other_name: string; student_id: string; photo_url: string | null; class_name: string | null; arm_name: string | null };
+  periods: CheckerPeriod[];
+  school: { school_name: string; logo_url: string; motto: string; current_session_id: string | null; current_term_id: string | null } | null;
+}
+
+/** Public: verifies surname + token and lists the sessions/terms that have published results. */
+export async function apiCheckerVerify(surname: string, token: string): Promise<CheckerInfo> {
+  const response = await request<{ data: CheckerInfo }>('/public/check', { method: 'POST', body: JSON.stringify({ surname, token }) });
+  return response.data;
+}
+
+/** Public: fetches one report card using surname + token. */
+export async function apiCheckerReport(surname: string, token: string, sessionId: string, termId: string): Promise<ReportBundle> {
+  const response = await request<{ data: ReportBundle }>('/public/report', { method: 'POST', body: JSON.stringify({ surname, token, session_id: sessionId, term_id: termId }) });
+  return response.data;
+}
+
+/** Admin: creates result tokens for students that do not have one (or replaces them when regenerate is true). */
+export async function apiGenerateTokens(options: { student_ids?: string[]; class_id?: string; arm_id?: string; regenerate?: boolean } = {}): Promise<{ generated: number; considered: number }> {
+  const response = await request<{ data: { generated: number; considered: number } }>('/tokens/generate', { method: 'POST', body: JSON.stringify(options) });
+  return response.data;
+}
+
+export interface PublicAppSettings { school_name: string; logo_url: string; motto: string; result_access_mode: 'portal' | 'token' | 'both' }
+
+/** No auth required: lets the login page and the result checker know which mode the school has enabled. */
+export async function apiPublicSettings(): Promise<PublicAppSettings> {
+  const response = await request<{ data: PublicAppSettings }>('/public/settings');
+  return response.data;
+}
+
+export async function apiForgotPassword(email: string): Promise<string> {
+  const response = await request<{ data: { message: string } }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  return response.data.message;
+}
+
+export async function apiResetPassword(token: string, password: string): Promise<string> {
+  const response = await request<{ data: { message: string } }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+  return response.data.message;
 }
 
 export function apiLogout() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('srp_current_user'); }
@@ -138,7 +206,7 @@ export async function apiCreateUser(payload: CreateUserPayload): Promise<{ data:
 }
 
 /** Updates a login account's profile fields and/or resets its password. Same reasoning as apiCreateUser. */
-export async function apiUpdateUser(id: string, payload: Partial<Pick<CreateUserPayload, 'email' | 'display_name' | 'password'>>): Promise<{ data: unknown; error: Error | null }> {
+export async function apiUpdateUser(id: string, payload: Partial<Pick<CreateUserPayload, 'email' | 'display_name' | 'password' | 'teacher_id' | 'student_id' | 'parent_id'>>): Promise<{ data: unknown; error: Error | null }> {
   try {
     const response = await request<{ data: unknown }>(`/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
     return { data: response.data, error: null };

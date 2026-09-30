@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { api } from '@/lib/apiClient';
+import { api, apiCreateUser } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,6 +16,9 @@ const empty: Partial<Teacher> = {
   subject_ids: [], class_ids: [],
 };
 
+interface LoginFields { create: boolean; email: string; password: string }
+const emptyLogin: LoginFields = { create: false, email: '', password: '' };
+
 export function TeachersPage() {
   const { success, error } = useToast();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -28,6 +31,8 @@ export function TeachersPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [login, setLogin] = useState<LoginFields>(emptyLogin);
+  const [loginError, setLoginError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,8 +57,8 @@ export function TeachersPage() {
     return !q || t.full_name.toLowerCase().includes(q) || t.teacher_id.toLowerCase().includes(q) || (t.email ?? '').toLowerCase().includes(q);
   });
 
-  const openAdd = () => { setEditing({ ...empty, subject_ids: [], class_ids: [] }); setErrors({}); setModalOpen(true); };
-  const openEdit = (t: Teacher) => { setEditing({ ...t, subject_ids: t.subject_ids ?? [], class_ids: t.class_ids ?? [] }); setErrors({}); setModalOpen(true); };
+  const openAdd = () => { setEditing({ ...empty, subject_ids: [], class_ids: [] }); setErrors({}); setLogin({ ...emptyLogin, email: '' }); setLoginError(''); setModalOpen(true); };
+  const openEdit = (t: Teacher) => { setEditing({ ...t, subject_ids: t.subject_ids ?? [], class_ids: t.class_ids ?? [] }); setErrors({}); setLogin(emptyLogin); setLoginError(''); setModalOpen(true); };
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -83,9 +88,13 @@ export function TeachersPage() {
       subject_ids: editing.subject_ids ?? [],
       class_ids: editing.class_ids ?? [],
     };
+    if (!editing.id && login.create) {
+      if (!login.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login.email)) { setSaving(false); setLoginError('Enter a valid email for the login.'); return; }
+      if (login.password.length < 6) { setSaving(false); setLoginError('Password must be at least 6 characters.'); return; }
+    }
     const res = editing.id
       ? await api.from('teachers').update(payload).eq('id', editing.id)
-      : await api.from('teachers').insert(payload);
+      : await api.from('teachers').insert(payload).select('*').single();
     setSaving(false);
     if (res.error) { error('Failed to save teacher: ' + res.error.message); return; }
     // keep subjects in sync with teacher
@@ -94,6 +103,14 @@ export function TeachersPage() {
       for (const sid of editing.subject_ids ?? []) {
         await api.from('subjects').update({ teacher_id: editing.id }).eq('id', sid);
       }
+    } else if (login.create) {
+      const newTeacher = res.data as Teacher;
+      const loginRes = await apiCreateUser({ email: login.email.trim().toLowerCase(), password: login.password, role: 'teacher', display_name: payload.full_name, teacher_id: newTeacher.id });
+      if (loginRes.error) error(`Teacher saved, but the login could not be created: ${loginRes.error.message}`);
+      else success('Teacher added with a login account.');
+      setModalOpen(false);
+      load();
+      return;
     }
     success(editing.id ? 'Teacher updated successfully.' : 'Teacher added successfully.');
     setModalOpen(false);
@@ -209,6 +226,25 @@ export function TeachersPage() {
                 </Select>
               </Field>
             </div>
+            {!editing.id && (
+              <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={login.create} onChange={(e) => { setLogin({ ...login, create: e.target.checked }); setLoginError(''); }} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                  Create a login for this teacher now
+                </label>
+                {login.create && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Login Email" required>
+                      <Input type="email" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} placeholder="teacher@school.edu.ng" />
+                    </Field>
+                    <Field label="Password" required hint="Minimum 6 characters">
+                      <Input value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} />
+                    </Field>
+                  </div>
+                )}
+                {loginError && <p className="text-xs text-red-600">{loginError}</p>}
+              </div>
+            )}
             <div>
               <p className="text-sm font-medium text-slate-700 mb-2">Assigned Subjects</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-lg">

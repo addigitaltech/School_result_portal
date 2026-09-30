@@ -115,7 +115,7 @@ export function SettingsPage() {
       school_name: settings.school_name, address: settings.address, phone: settings.phone, email: settings.email, logo_url: settings.logo_url,
       motto: settings.motto, pass_percentage: settings.pass_percentage, ca1_max_score: settings.ca1_max_score, ca2_max_score: settings.ca2_max_score,
       ca3_max_score: settings.ca3_max_score, exam_max_score: settings.exam_max_score, current_session_id: settings.current_session_id, current_term_id: settings.current_term_id,
-      highlight_fail_grade: settings.highlight_fail_grade,
+      highlight_fail_grade: settings.highlight_fail_grade, result_access_mode: settings.result_access_mode,
       updated_at: new Date().toISOString(),
     }).eq('id', settings.id);
     if (settingsResponse.error) { setSaving(false); error(`Failed to save school settings: ${settingsResponse.error.message}`); return; }
@@ -157,6 +157,22 @@ export function SettingsPage() {
           <input type="checkbox" checked={settings.highlight_fail_grade} onChange={(e) => update({ highlight_fail_grade: e.target.checked })} className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500" />
           <span><span className="block text-sm font-medium text-slate-700">Highlight F grade in red on printed report cards</span><span className="block text-xs text-slate-400 mt-0.5">On by default. Turn off if you'd rather every grade use the same color.</span></span>
         </label><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-slate-500 text-xs uppercase"><tr><th className="text-left px-3 py-2">Min</th><th className="text-left px-3 py-2">Max</th><th className="text-left px-3 py-2">Grade</th><th className="text-left px-3 py-2">Remark</th><th className="px-3 py-2">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{gradeBands.map((band) => <tr key={band.clientId}><td className="px-3 py-2"><Input type="number" min={0} max={100} value={band.min_score} onChange={(e) => updateBand(band.clientId, { min_score: Number(e.target.value) })} /></td><td className="px-3 py-2"><Input type="number" min={0} max={100} value={band.max_score} onChange={(e) => updateBand(band.clientId, { max_score: Number(e.target.value) })} /></td><td className="px-3 py-2"><Input value={band.grade} onChange={(e) => updateBand(band.clientId, { grade: e.target.value })} placeholder="A" /></td><td className="px-3 py-2"><Input value={band.remark} onChange={(e) => updateBand(band.clientId, { remark: e.target.value })} placeholder="Excellent" /></td><td className="px-3 py-2 text-center"><button type="button" onClick={() => removeBand(band)} className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label={`Delete grade ${band.grade}`}><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>{gradeBands.length === 0 && <p className="py-4 text-sm text-slate-500">No grade bands configured. Add bands covering 0–100.</p>}{gradeBandError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{gradeBandError}</p>}<p className="mt-3 text-xs text-slate-400">Example valid coverage: 0–39, 40–44, 45–49, 50–59, 60–69, 70–100.</p></CardBody></Card>
+
+      <Card><CardHeader title="Result Access" subtitle="How students and parents check results" /><CardBody className="space-y-2">
+        {([
+          ['portal', 'Student & Parent Portal', 'Students and parents sign in with an email and password to view results.'],
+          ['token', 'Result Checker (surname + token)', 'No accounts. Each student gets a printable token; anyone with the surname and token can view or print that result. The Student/Parent portal is not used.'],
+          ['both', 'Both', 'The portal and the token checker are both available at the same time.'],
+        ] as const).map(([value, label, hint]) => (
+          <label key={value} className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer ${settings.result_access_mode === value ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200'}`}>
+            <input type="radio" name="result_access_mode" checked={settings.result_access_mode === value} onChange={() => update({ result_access_mode: value })} className="mt-0.5 text-blue-600 focus:ring-blue-500" />
+            <span><span className="block text-sm font-medium text-slate-700">{label}</span><span className="block text-xs text-slate-400 mt-0.5">{hint}</span></span>
+          </label>
+        ))}
+        {(settings.result_access_mode === 'token' || settings.result_access_mode === 'both') && (
+          <p className="text-xs text-slate-400 pt-1">Generate and print each student's token from the Students page (Generate Tokens / the key icon on a student row).</p>
+        )}
+      </CardBody></Card>
 
       <Card><CardHeader title="Current Academic Period" subtitle="Used as the default session and term across the portal" /><CardBody><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Current Session"><Select value={settings.current_session_id ?? ''} onChange={(e) => update({ current_session_id: e.target.value || null, current_term_id: null })}><option value="">Select session</option>{sessions.map((session) => <option key={session.id} value={session.id}>{session.name}</option>)}</Select></Field><Field label="Current Term"><Select value={settings.current_term_id ?? ''} onChange={(e) => update({ current_term_id: e.target.value || null })}><option value="">Select term</option>{availableTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}</Select></Field></div></CardBody></Card>
 

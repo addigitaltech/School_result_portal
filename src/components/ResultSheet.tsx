@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/apiClient';
+import { api, type ReportBundle } from '@/lib/apiClient';
 import { computeGrade, overallGrade } from '@/lib/grading';
 import { fullName, formatDate, calculateAge } from '@/lib/format';
 import { Logo } from '@/components/Logo';
@@ -14,6 +14,8 @@ interface ResultSheetProps {
   term: Term | null;
   results: (Result & { subjects?: Subject })[];
   className: string;
+  /** When supplied (public checker and staff printing), all statistics come pre-computed from the server. */
+  bundle?: ReportBundle;
 }
 
 interface SubjectStat {
@@ -35,7 +37,7 @@ interface StudentMetric {
 
 const ratingLabels: Record<number, string> = { 1: 'Poor', 2: 'Fair', 3: 'Average', 4: 'Good', 5: 'Excellent' };
 
-export function ResultSheet({ student, settings, session, term, results, className }: ResultSheetProps) {
+export function ResultSheet({ student, settings, session, term, results, className, bundle }: ResultSheetProps) {
   const [termRemark, setTermRemark] = useState<TermRemark | null>(null);
   const [gradeBands, setGradeBands] = useState<GradeBand[]>([]);
   const [traits, setTraits] = useState<AffectiveTrait[]>([]);
@@ -46,6 +48,19 @@ export function ResultSheet({ student, settings, session, term, results, classNa
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
+    if (bundle) {
+      const ratingMap: Record<string, number> = {};
+      bundle.ratings.forEach((rating) => { ratingMap[rating.trait_id] = rating.rating; });
+      setTermRemark(bundle.termRemark);
+      setGradeBands(bundle.gradeBands);
+      setTraits(bundle.traits);
+      setRatings(ratingMap);
+      setArmName(bundle.armName);
+      setClassStudents(bundle.classStudents);
+      setAllResults(bundle.allResults);
+      setLoadingStats(false);
+      return;
+    }
     if (!session?.id || !term?.id) {
       setTermRemark(null);
       setGradeBands([]);
@@ -92,7 +107,7 @@ export function ResultSheet({ student, settings, session, term, results, classNa
     })();
 
     return () => { cancelled = true; };
-  }, [student.id, student.class_id, session?.id, term?.id]);
+  }, [bundle, student.id, student.class_id, session?.id, term?.id]);
 
   const offeredResults = results.filter((result) => result.is_offered !== false);
   const highlightFail = settings?.highlight_fail_grade !== false; // default ON when the setting is missing/undefined

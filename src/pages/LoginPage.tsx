@@ -1,18 +1,12 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, Mail, Lock, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, LogIn, Mail, Lock, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiPublicSettings, type PublicAppSettings } from '@/lib/apiClient';
 import { useToast } from '@/context/ToastContext';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
-
-const demoAccounts = [
-  { role: 'Administrator', email: 'admin@school.edu.ng', password: 'admin123' },
-  { role: 'Teacher', email: 'teacher@school.edu.ng', password: 'teacher123' },
-  { role: 'Student', email: 'student@school.edu.ng', password: 'student123' },
-  { role: 'Parent', email: 'parent@school.edu.ng', password: 'parent123' },
-];
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -24,6 +18,10 @@ export function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState('');
+  const [publicSettings, setPublicSettings] = useState<PublicAppSettings | null>(null);
+
+  useEffect(() => { apiPublicSettings().then(setPublicSettings).catch(() => setPublicSettings(null)); }, []);
+  const checkerEnabled = publicSettings?.result_access_mode === 'token' || publicSettings?.result_access_mode === 'both';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,18 +38,7 @@ export function LoginPage() {
       toastError(result.error ?? 'Login failed.');
       return;
     }
-    const lower = email.trim().toLowerCase();
-    if (lower === 'admin@school.edu.ng') navigate('/admin');
-    else if (lower === 'teacher@school.edu.ng') navigate('/teacher');
-    else if (lower === 'student@school.edu.ng') navigate('/student');
-    else if (lower === 'parent@school.edu.ng') navigate('/parent');
-    else navigate('/');
-  };
-
-  const fillDemo = (acc: { email: string; password: string }) => {
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setErr('');
+    navigate('/');
   };
 
   return (
@@ -97,14 +84,14 @@ export function LoginPage() {
             <p className="text-sm text-slate-500 mb-6">Sign in to access your dashboard.</p>
 
             <form onSubmit={submit} className="space-y-4">
-              <Field label="Email" required>
+              <Field label="Email or Student ID" required>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@school.edu.ng"
+                    placeholder="you@school.edu.ng or STU001"
                     className="pl-9"
                     autoComplete="username"
                   />
@@ -141,7 +128,7 @@ export function LoginPage() {
                   <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
                   Remember me
                 </label>
-                <button type="button" className="text-blue-600 hover:text-blue-700 font-medium">Forgot password?</button>
+                <Link to="/forgot-password" className="text-blue-600 hover:text-blue-700 font-medium">Forgot password?</Link>
               </div>
 
               <Button type="submit" size="lg" className="w-full" disabled={submitting} icon={<LogIn className="h-4 w-4" />}>
@@ -149,24 +136,12 @@ export function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-slate-200">
-              <div className="flex items-start gap-2 text-xs text-slate-500 mb-3">
-                <Info className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-500" />
-                <p>Use a demo account below to explore each role. Click to auto-fill.</p>
+            {checkerEnabled && (
+              <div className="mt-6 pt-6 border-t border-slate-200 text-center">
+                <p className="text-sm text-slate-500 mb-2">Student or parent checking a result?</p>
+                <Link to="/check-result" className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:text-blue-800"><Search className="h-4 w-4" /> Check result with surname &amp; token</Link>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {demoAccounts.map((acc) => (
-                  <button
-                    key={acc.email}
-                    onClick={() => fillDemo(acc)}
-                    className="text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                  >
-                    <p className="text-xs font-semibold text-slate-700">{acc.role}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{acc.email}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

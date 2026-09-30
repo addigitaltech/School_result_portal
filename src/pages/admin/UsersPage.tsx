@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner, EmptyState } from '@/components/ui/Feedback';
 import type { AppUser, Role, Teacher, Student, Parent } from '@/lib/types';
-import { Users2, Plus, Trash2, Search, KeyRound } from 'lucide-react';
+import { Users2, Plus, Trash2, Search, KeyRound, Pencil } from 'lucide-react';
 
 interface EditableUser extends Partial<AppUser> {
   password?: string;
@@ -58,14 +58,19 @@ export function UsersPage() {
   });
 
   const openAdd = () => { setEditing({ ...empty }); setErrors({}); setModalOpen(true); };
+  const openEdit = (user: AppUser) => { setEditing({ ...user, password: '' }); setErrors({}); setModalOpen(true); };
+
+  const isStaffRole = editing?.role === 'admin' || editing?.role === 'teacher';
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!editing?.email?.trim()) e.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editing.email)) e.email = 'Invalid email';
-    else if (users.some((u) => u.email === editing.email?.trim().toLowerCase() && u.id !== editing.id)) e.email = 'Email already exists';
-    if (!editing?.password?.trim()) e.password = 'Password is required';
-    else if (editing.password.length < 6) e.password = 'Password must be at least 6 characters';
+    if (!editing?.email?.trim()) e.email = isStaffRole ? 'Email is required' : 'A login ID (e.g. Student ID) is required';
+    else if (isStaffRole && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editing.email)) e.email = 'Invalid email';
+    else if (users.some((u) => u.email === editing.email?.trim().toLowerCase() && u.id !== editing.id)) e.email = 'Already in use by another account';
+    if (!editing?.id) {
+      if (!editing?.password?.trim()) e.password = 'Password is required';
+      else if (editing.password.length < 6) e.password = 'Password must be at least 6 characters';
+    } else if (editing.password && editing.password.length < 6) e.password = 'Password must be at least 6 characters';
     if (!editing?.display_name?.trim()) e.display_name = 'Display name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -74,18 +79,27 @@ export function UsersPage() {
   const save = async () => {
     if (!editing || !validate()) return;
     setSaving(true);
-    const res = await apiCreateUser({
-      email: editing.email!.trim().toLowerCase(),
-      password: editing.password!,
-      role: editing.role as Role,
-      display_name: editing.display_name!.trim(),
-      teacher_id: editing.teacher_id || null,
-      student_id: editing.student_id || null,
-      parent_id: editing.parent_id || null,
-    });
+    const res = editing.id
+      ? await apiUpdateUser(editing.id, {
+          email: editing.email!.trim().toLowerCase(),
+          display_name: editing.display_name!.trim(),
+          teacher_id: editing.teacher_id || null,
+          student_id: editing.student_id || null,
+          parent_id: editing.parent_id || null,
+          ...(editing.password ? { password: editing.password } : {}),
+        })
+      : await apiCreateUser({
+          email: editing.email!.trim().toLowerCase(),
+          password: editing.password!,
+          role: editing.role as Role,
+          display_name: editing.display_name!.trim(),
+          teacher_id: editing.teacher_id || null,
+          student_id: editing.student_id || null,
+          parent_id: editing.parent_id || null,
+        });
     setSaving(false);
-    if (res.error) { error(res.error.message || 'Failed to create user.'); return; }
-    success('User created successfully.');
+    if (res.error) { error(res.error.message || 'Failed to save user.'); return; }
+    success(editing.id ? 'User updated successfully.' : 'User created successfully.');
     setModalOpen(false);
     load();
   };
@@ -157,6 +171,7 @@ export function UsersPage() {
                     <td className="px-5 py-3"><Badge variant={roleVariant[u.role]}>{u.role}</Badge></td>
                     <td className="px-5 py-3 text-right">
                       <div className="inline-flex items-center gap-1">
+                        <button onClick={() => openEdit(u)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title="Edit"><Pencil className="h-4 w-4" /></button>
                         <button onClick={() => openReset(u)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Reset Password"><KeyRound className="h-4 w-4" /></button>
                         <button onClick={() => setDeleteId(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 className="h-4 w-4" /></button>
                       </div>
@@ -169,26 +184,27 @@ export function UsersPage() {
         )}
       </Card>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add User" size="md"
-        footer={<><Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Create'}</Button></>}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing?.id ? 'Edit User' : 'Add User'} size="md"
+        footer={<><Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? 'Saving...' : editing?.id ? 'Save' : 'Create'}</Button></>}>
         {editing && (
           <div className="space-y-4">
             <Field label="Display Name" required error={errors.display_name}>
               <Input value={editing.display_name ?? ''} error={!!errors.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} />
             </Field>
-            <Field label="Email" required error={errors.email}>
-              <Input type="email" value={editing.email ?? ''} error={!!errors.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+            <Field label={isStaffRole ? 'Email' : 'Login ID (e.g. Student ID)'} required error={errors.email}>
+              <Input type={isStaffRole ? 'email' : 'text'} value={editing.email ?? ''} error={!!errors.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
             </Field>
-            <Field label="Password" required error={errors.password} hint="Minimum 6 characters">
+            <Field label={editing.id ? 'New Password (optional)' : 'Password'} required={!editing.id} error={errors.password} hint="Minimum 6 characters. Leave blank to keep the current password.">
               <Input value={editing.password ?? ''} error={!!errors.password} onChange={(e) => setEditing({ ...editing, password: e.target.value })} />
             </Field>
             <Field label="Role" required>
-              <Select value={editing.role ?? 'teacher'} onChange={(e) => setEditing({ ...editing, role: e.target.value as Role, teacher_id: null, student_id: null, parent_id: null })}>
+              <Select value={editing.role ?? 'teacher'} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, role: e.target.value as Role, teacher_id: null, student_id: null, parent_id: null })}>
                 <option value="admin">Administrator</option>
                 <option value="teacher">Teacher</option>
                 <option value="student">Student</option>
                 <option value="parent">Parent</option>
               </Select>
+              {editing.id && <p className="mt-1 text-xs text-slate-400">Role cannot be changed after creation. Delete and recreate the account instead.</p>}
             </Field>
             {editing.role === 'teacher' && (
               <Field label="Linked Teacher">
