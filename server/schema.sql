@@ -19,6 +19,7 @@ CREATE TABLE school_settings (
   ca3_max_score integer NOT NULL DEFAULT 0 CHECK (ca3_max_score >= 0),
   exam_max_score integer NOT NULL DEFAULT 60 CHECK (exam_max_score >= 0),
   highlight_fail_grade boolean NOT NULL DEFAULT true,
+  result_access_mode text NOT NULL DEFAULT 'portal' CHECK (result_access_mode IN ('portal','token','both')),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -203,3 +204,32 @@ INSERT INTO grade_bands (min_score, max_score, grade, remark) VALUES
 INSERT INTO affective_traits (name) VALUES
   ('Attentiveness'), ('Honesty'), ('Industriousness'), ('Neatness'),
   ('Obedience'), ('Relationship With Others'), ('Handwriting'), ('Punctuality');
+
+-- ---------------------------------------------------------------------------
+-- v3: database-backed file storage, student result tokens, password reset
+-- (also available as server/migrations/002_v3_tokens_files_reset.sql for existing databases)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS uploaded_files (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  path text NOT NULL UNIQUE,
+  content_type text NOT NULL,
+  data bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS student_tokens (
+  student_id uuid PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  token text NOT NULL UNIQUE,
+  use_count integer NOT NULL DEFAULT 0,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

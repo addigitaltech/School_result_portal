@@ -1,6 +1,6 @@
 # Render API migration
 
-The frontend now uses the Node/Express API under `/server` instead of Supabase. The API uses PostgreSQL through `DATABASE_URL`, JWT bearer tokens, bcrypt password hashes, and Cloudflare R2 for uploads.
+The frontend now uses the Node/Express API under `/server` instead of Supabase. The API uses PostgreSQL through `DATABASE_URL`, JWT bearer tokens, bcrypt password hashes, and PostgreSQL-backed uploads.
 
 ## Endpoint list
 
@@ -11,7 +11,7 @@ Base URL: `https://<api-service>.onrender.com/api`
 | `POST` | `/login` | Exchange email/password for a JWT and user profile | Public login endpoint |
 | `GET` | `/me` | Return the current JWT user | Any authenticated user |
 | `GET` | `/report-card/:studentId/:sessionId/:termId` | Return published report-card results; Third Term includes cumulative fields | Student/parent for linked student; authenticated staff |
-| `POST` | `/uploads` | Upload a logo or student photo to Cloudflare R2 | Admin/teacher; path must begin `school-logos/` or `student-photos/` |
+| `POST` | `/uploads` | Upload a logo or student photo into PostgreSQL | Admin/teacher; path must begin `school-logos/` or `student-photos/` |
 | `GET` | `/data/:table` | List/query a supported resource | Authenticated; role-scoped |
 | `POST` | `/data/:table` | Insert a row or array of rows | Admin; teachers for results, affective ratings, and term remarks |
 | `PUT` | `/data/:table` | Update rows using query filters | Admin; teachers for results, affective ratings, and term remarks |
@@ -59,11 +59,13 @@ Add these API-service environment variables:
 - `DATABASE_URL` — connection string for the new empty PostgreSQL database
 - `JWT_SECRET` — long random secret, different per environment
 - `FRONTEND_ORIGIN` — the Render static-site URL, used for CORS
-- `R2_ENDPOINT` — Cloudflare R2 S3-compatible endpoint
-- `R2_BUCKET` — R2 bucket name
-- `R2_ACCESS_KEY_ID` — R2 API token access key
-- `R2_SECRET_ACCESS_KEY` — R2 API token secret
-- `R2_PUBLIC_BASE_URL` — public custom-domain URL or R2 public bucket URL
+- `PUBLIC_API_URL` — public base URL used to construct file URLs
+- `SMTP_HOST` — for example `smtp.gmail.com`
+- `SMTP_PORT` — typically `465`
+- `SMTP_USER` — Gmail address used for password-reset email
+- `SMTP_PASS` — Gmail 16-character App Password, not the normal account password
+- `SMTP_FROM` — sender display name and address
+- `APP_URL` — frontend URL used in password-reset links
 - `PORT` — Render supplies this automatically; do not hard-code it in Render settings
 
 For the existing Render static site:

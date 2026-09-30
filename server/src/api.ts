@@ -16,16 +16,16 @@ export interface AuthUser {
   parent_id: string | null;
 }
 
-type AuthedRequest = Request & { user?: AuthUser };
+export type AuthedRequest = Request & { user?: AuthUser };
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'development-only-change-me';
 const tables = new Set([
   'school_settings', 'app_users', 'academic_sessions', 'terms', 'teachers', 'classes', 'arms',
   'class_arms', 'subjects', 'students', 'parents', 'results', 'grade_bands', 'affective_traits',
-  'affective_ratings', 'term_remarks',
+  'affective_ratings', 'term_remarks', 'student_tokens',
 ]);
 const columns: Record<string, Set<string>> = {
-  school_settings: new Set(['id','school_name','address','phone','email','logo_url','current_session_id','current_term_id','pass_percentage','motto','ca1_max_score','ca2_max_score','ca3_max_score','exam_max_score','highlight_fail_grade','updated_at']),
+  school_settings: new Set(['id','school_name','address','phone','email','logo_url','current_session_id','current_term_id','pass_percentage','motto','ca1_max_score','ca2_max_score','ca3_max_score','exam_max_score','highlight_fail_grade','result_access_mode','updated_at']),
   app_users: new Set(['id','email','password_hash','role','display_name','teacher_id','student_id','parent_id','created_at']),
   academic_sessions: new Set(['id','name','is_active','created_at']),
   terms: new Set(['id','name','session_id','is_current','created_at']),
@@ -41,13 +41,14 @@ const columns: Record<string, Set<string>> = {
   affective_traits: new Set(['id','name','created_at']),
   affective_ratings: new Set(['id','student_id','trait_id','session_id','term_id','rating','created_at','updated_at']),
   term_remarks: new Set(['id','student_id','session_id','term_id','teacher_remark','principal_remark','created_at','updated_at']),
+  student_tokens: new Set(['student_id','token','use_count','last_used_at','created_at']),
 };
 
-function jsonError(res: Response, message: string, status = 400) {
+export function jsonError(res: Response, message: string, status = 400) {
   res.status(status).json({ error: message });
 }
 
-function signUser(user: AuthUser) {
+export function signUser(user: AuthUser) {
   return jwt.sign(user, JWT_SECRET, { expiresIn: '8h' });
 }
 
@@ -62,7 +63,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
 }
 
-function requireRole(...roles: Role[]) {
+export function requireRole(...roles: Role[]) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) return jsonError(res, 'You are not authorized for this operation.', 403);
     next();
@@ -87,7 +88,7 @@ function addFilter(table: string, rawKey: string, rawValue: string, params: unkn
   const op = match[2] ?? 'eq';
   if (op === 'in') {
     const values = rawValue.split(',');
-    where.push(`"${column}" = ANY($${params.length + 1}::text[])`);
+    where.push(`"${column}"::text = ANY($${params.length + 1}::text[])`);
     params.push(values);
   } else if (op === 'is') {
     where.push(rawValue === 'null' ? `"${column}" IS NULL` : `"${column}" IS NOT NULL`);
@@ -108,7 +109,7 @@ function applyScope(table: string, user: AuthUser, where: string[], params: unkn
     // Subjects are readable by teachers (reference data), but a teacher can only update/delete their own.
     if (table === 'subjects' && method !== 'GET') { where.push(`teacher_id = $${params.length + 1}`); params.push(user.teacher_id); }
     if (['affective_ratings', 'term_remarks'].includes(table)) { where.push(`student_id IN (SELECT id FROM students WHERE class_id = ANY($${params.length + 1}::uuid[]))`); params.push(user.class_ids ?? []); }
-    if (table === 'app_users') { where.push('1 = 0'); }
+    if (table === 'app_users' || table === 'student_tokens') { where.push('1 = 0'); }
   }
   if (user.role === 'student') {
     if (['students','results','affective_ratings','term_remarks'].includes(table)) { where.push(`student_id = $${params.length + 1}`); params.push(user.student_id); }
@@ -201,10 +202,15 @@ apiRouter.post('/users', requireAuth, requireRole('admin'), async (req: AuthedRe
   const password = String(req.body?.password ?? '');
   const displayName = String(req.body?.display_name ?? '').trim();
   const role = req.body?.role as Role;
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(res, 'A valid email is required.');
+  if (!['admin', 'teacher', 'student', 'parent'].includes(role)) return jsonError(res, 'A valid role is required.');
+  // Admins and teachers sign in with a real email. Students commonly sign in with their Student ID
+  // instead (no email required), so that identifier is only checked for shape, not for an @ sign.
+  const identifierOk = ['admin', 'teacher'].includes(role)
+    ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    : email.length >= 3;
+  if (!email || !identifierOk) return jsonError(res, ['admin', 'teacher'].includes(role) ? 'A valid email is required.' : 'A login identifier (e.g. the Student ID) is required.');
   if (!password || password.length < 6) return jsonError(res, 'Password must be at least 6 characters.');
   if (!displayName) return jsonError(res, 'Display name is required.');
-  if (!['admin', 'teacher', 'student', 'parent'].includes(role)) return jsonError(res, 'A valid role is required.');
   try {
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await query(
@@ -225,6 +231,11 @@ apiRouter.put('/users/:id', requireAuth, requireRole('admin'), async (req: Authe
   const params: unknown[] = [];
   if (typeof req.body?.display_name === 'string' && req.body.display_name.trim()) { updates.push(`display_name = $${params.length + 1}`); params.push(req.body.display_name.trim()); }
   if (typeof req.body?.email === 'string' && req.body.email.trim()) { updates.push(`email = $${params.length + 1}`); params.push(req.body.email.trim().toLowerCase()); }
+  // Lets an admin reassign this login to a different teacher/student/parent record (e.g. a student
+  // moved to a new class record, or a parent record was merged). Sending null clears the link.
+  for (const field of ['teacher_id', 'student_id', 'parent_id'] as const) {
+    if (field in (req.body ?? {})) { updates.push(`${field} = $${params.length + 1}`); params.push(req.body[field] || null); }
+  }
   if (typeof req.body?.password === 'string' && req.body.password) {
     if (req.body.password.length < 6) return jsonError(res, 'Password must be at least 6 characters.');
     updates.push(`password_hash = $${params.length + 1}`);
@@ -258,7 +269,7 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
         if (typeof value === 'string') addFilter(table, key, value, params, where);
       }
       if (req.query.in_field && req.query.in_values && typeof req.query.in_field === 'string' && typeof req.query.in_values === 'string') addFilter(table, `${req.query.in_field}[in]`, req.query.in_values, params, where);
-      const defaultOrder = columns[table].has('created_at') ? 'created_at' : 'id';
+      const defaultOrder = columns[table].has('created_at') ? 'created_at' : [...columns[table]][0];
       const order = typeof req.query.order === 'string' && columns[table].has(req.query.order.replace(/^-/, '')) ? req.query.order : defaultOrder;
       const orderColumn = order.replace(/^-/, '');
       const direction = order.startsWith('-') ? 'DESC' : 'ASC';
@@ -288,7 +299,8 @@ apiRouter.all('/data/:table', requireAuth, async (req: AuthedRequest, res) => {
     }
 
     const filters = Object.entries(req.query).filter(([key]) => key !== 'select' && key !== 'order' && key !== 'limit');
-    for (const [key, value] of filters) if (typeof value === 'string') addFilter(table, key, value, params, where);
+    for (const [key, value] of filters) if (typeof value === 'string' && key !== 'in_field' && key !== 'in_values') addFilter(table, key, value, params, where);
+    if (typeof req.query.in_field === 'string' && typeof req.query.in_values === 'string') addFilter(table, `${req.query.in_field}[in]`, req.query.in_values, params, where);
     if (!where.length) return jsonError(res, 'An update or delete filter is required.', 400);
     if (req.method === 'PUT' || req.method === 'PATCH') {
       const assignments = validEntries.map(([key], index) => `"${key}" = $${params.length + index + 1}`);

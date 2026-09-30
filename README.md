@@ -12,7 +12,8 @@ A web application for managing school results, built with React, TypeScript, and
 - Third Term report cards automatically include a cumulative annual total/average across First, Second, and Third Term for each subject
 - Student and parent portals for viewing published results
 - Printable, formatted report cards (with class average/high/low/position and a performance chart), previewable by admins and teachers directly from the results list
-- Student photo and school logo uploads (Cloudflare R2)
+- Student photo and school logo uploads stored in PostgreSQL
+- Optional email password reset for admin and teacher accounts
 
 ## Architecture
 
@@ -32,7 +33,7 @@ A web application for managing school results, built with React, TypeScript, and
    cp .env.example .env
    ```
    - `VITE_API_URL` — where the frontend expects the API (e.g. `http://localhost:10000/api` locally, or your deployed API's `https://.../api` in production)
-   - `DATABASE_URL`, `JWT_SECRET`, `R2_*` — used by the `server/` API only, not the frontend build
+   - `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_ORIGIN`, `PUBLIC_API_URL`, and optional `SMTP_*`/`APP_URL` — used by the `server/` API only, not the frontend build
 
 3. Apply the schema to your PostgreSQL database:
    ```
@@ -60,7 +61,7 @@ npm run server:build   # backend  -> server/dist/
 ## Deployment
 
 - **Frontend:** Render Static Site — build `npm install && npm run build`, publish directory `dist`, env var `VITE_API_URL` pointing at the deployed API's `/api` path.
-- **Backend:** Render Web Service — build `npm install && npm run server:build`, start `npm run server:start`, env vars `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_ORIGIN`, and the `R2_*` variables (uploads return a 503 gracefully if R2 isn't configured, rather than crashing).
+- **Backend:** Render Web Service — build `npm install && npm run server:build`, start `npm run server:start`, env vars `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_ORIGIN`, and `PUBLIC_API_URL`; add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and `APP_URL` to enable password-reset email.
 - **Database:** Render PostgreSQL — see `server/schema.sql`.
 
 See `docs/backend-migration.md` for the full endpoint list, per-role authorization rules, and migration history from the original Supabase-based version.
